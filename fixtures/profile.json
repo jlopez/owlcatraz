@@ -1,0 +1,24 @@
+{
+  "currentCourse": {
+    "learningLanguage": "el",
+    "fromLanguage": "en",
+    "skills": [
+      [{ "id": "synth-skill-01", "finishedLevels": 5, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-02", "finishedLevels": 4, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-03", "finishedLevels": 3, "finishedLessons": 1 }],
+      [{ "id": "synth-skill-04", "finishedLevels": 0, "finishedLessons": 3 }],
+      [{ "id": "synth-skill-05", "finishedLevels": 2, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-06", "finishedLevels": 1, "finishedLessons": 2 }],
+      [{ "id": "synth-skill-07", "finishedLevels": 0, "finishedLessons": 1 }],
+      [{ "id": "synth-skill-08", "finishedLevels": 6, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-09", "finishedLevels": 2, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-10", "finishedLevels": 4, "finishedLessons": 1 }],
+      [{ "id": "synth-skill-11", "finishedLevels": 3, "finishedLessons": 0 }],
+      [{ "id": "synth-skill-12", "finishedLevels": 1, "finishedLessons": 0 }],
+      [
+        { "id": "synth-skill-not-started", "finishedLevels": 0, "finishedLessons": 0 },
+        { "id": "synth-skill-13", "finishedLevels": 5, "finishedLessons": 0 }
+      ]
+    ]
+  }
+}

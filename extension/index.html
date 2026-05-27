@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Owlcatraz</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+        min-width: 320px;
+        max-width: 360px;
+        box-sizing: border-box;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 12px;
+      }
+      .row {
+        font-size: 13px;
+        margin: 8px 0;
+      }
+      .muted {
+        color: #666;
+        font-size: 12px;
+      }
+      .error {
+        color: #b00020;
+        font-size: 13px;
+      }
+      .warn {
+        color: #b06000;
+        font-size: 12px;
+      }
+      button {
+        font-size: 13px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #58cc02;
+        color: white;
+        border: 1px solid #58cc02;
+        border-radius: 4px;
+      }
+      button.primary:disabled {
+        background: #ccc;
+        border-color: #ccc;
+        cursor: default;
+      }
+      button.link {
+        background: none;
+        border: none;
+        color: #1a73e8;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+        font-size: 12px;
+      }
+      input[type='text'],
+      input[type='password'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin: 8px 0 4px;
+        color: #333;
+      }
+      .settings-panel {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #eee;
+      }
+      .stats {
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .stats td:first-child {
+        color: #666;
+        padding-right: 8px;
+      }
+      .stats td:last-child {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      a {
+        color: #1a73e8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Owlcatraz</h1>
+    <div id="root">Loading…</div>
+    <script type="module" src="/src/popup/main.ts"></script>
+  </body>
+</html>

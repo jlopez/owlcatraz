@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["chrome"],
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/sw.tsbuildinfo"
+  },
+  "include": ["src/background/**/*.ts", "src/lib/**/*.ts", "src/types.ts"]
+}

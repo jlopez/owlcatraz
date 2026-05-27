@@ -1,0 +1,100 @@
+name: Bug report
+description: Something the extension does (or fails to do) that doesn't match the README.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Duolingo ships A/B-tested API
+        changes constantly, so the more of the fields below you can fill in, the
+        easier it is to figure out whether something has broken on their side
+        or ours.
+
+        For open-ended questions, design conversations, or "how do I use this
+        with language X?", please use
+        [Discussions](https://github.com/jlopez/owlcatraz/discussions) instead.
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Owlcatraz version
+      description: The version shown in `chrome://extensions` (or the commit SHA if you built from source).
+      placeholder: e.g. 0.1.0 or a8f3c12
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser and version
+      description: Find this at `chrome://version` (top line).
+      placeholder: e.g. Chrome 131.0.6778.85 (Official Build) (arm64) on macOS 15.1
+    validations:
+      required: true
+
+  - type: input
+    id: duolingo-course
+    attributes:
+      label: Duolingo course
+      description: From-language and learning-language pair currently active on duolingo.com.
+      placeholder: e.g. English → Greek
+    validations:
+      required: true
+
+  - type: input
+    id: anki-version
+    attributes:
+      label: Anki + AnkiConnect version (if relevant)
+      description: Only required for AnkiConnect-related bugs.
+      placeholder: e.g. Anki 25.02.4, AnkiConnect 24.7.25.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of what you saw, what you expected to see, and what you did to trigger it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: |
+        Step-by-step. The more specific the better — "click the icon, click Sync to Anki, error appears after 3 seconds" beats "doesn't work".
+      placeholder: |
+        1. Open chrome://extensions
+        2. Click the Owlcatraz icon
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: console-output
+    attributes:
+      label: Service-worker console output
+      description: |
+        On `chrome://extensions`, click the **Service worker** link on the Owlcatraz card to open its DevTools, reproduce the bug, then paste the console contents here. This is usually where Duolingo API failures and audio-fetch warnings show up.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra-context
+    attributes:
+      label: Anything else?
+      description: Screenshots, sanitized network captures, hunches about what's going on, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      description: Just confirming we're filing the right kind of bug.
+      options:
+        - label: This is about the extension's documented behavior — exporting my own vocabulary from my own logged-in Duolingo session into Anki. (If your issue is about Duolingo paid features, billing, or another account's data, this is the wrong tracker.)
+          required: true

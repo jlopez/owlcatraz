@@ -1,0 +1,174 @@
+{
+  "learnedLexemes": [
+    {
+      "text": "πόλη",
+      "translations": [
+        "city"
+      ],
+      "audioURL": "https://audio.example/lex-31.mp3",
+      "isNew": true
+    },
+    {
+      "text": "αδελφή",
+      "translations": [
+        "sister"
+      ],
+      "audioURL": "https://audio.example/lex-32.mp3",
+      "isNew": true
+    },
+    {
+      "text": "ζωή",
+      "translations": [
+        "life"
+      ],
+      "audioURL": "https://audio.example/lex-33.mp3",
+      "isNew": true
+    },
+    {
+      "text": "αγάπη",
+      "translations": [
+        "love"
+      ],
+      "audioURL": "https://audio.example/lex-34.mp3",
+      "isNew": false
+    },
+    {
+      "text": "φωνή",
+      "translations": [
+        "voice"
+      ],
+      "audioURL": "https://audio.example/lex-35.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μέρα",
+      "translations": [
+        "day"
+      ],
+      "audioURL": "https://audio.example/lex-36.mp3",
+      "isNew": true
+    },
+    {
+      "text": "ώρα",
+      "translations": [
+        "hour",
+        "time"
+      ],
+      "audioURL": "https://audio.example/lex-37.mp3",
+      "isNew": true
+    },
+    {
+      "text": "γυναίκα",
+      "translations": [
+        "woman"
+      ],
+      "audioURL": "https://audio.example/lex-38.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μητέρα",
+      "translations": [
+        "mother"
+      ],
+      "audioURL": "https://audio.example/lex-39.mp3",
+      "isNew": true
+    },
+    {
+      "text": "χώρα",
+      "translations": [
+        "country"
+      ],
+      "audioURL": "https://audio.example/lex-40.mp3",
+      "isNew": false
+    },
+    {
+      "text": "θάλασσα",
+      "translations": [
+        "sea"
+      ],
+      "audioURL": null,
+      "isNew": true
+    },
+    {
+      "text": "βιβλίο",
+      "translations": [
+        "book"
+      ],
+      "audioURL": "https://audio.example/lex-42.mp3",
+      "isNew": true
+    },
+    {
+      "text": "αυτοκίνητο",
+      "translations": [
+        "car"
+      ],
+      "audioURL": "https://audio.example/lex-43.mp3",
+      "isNew": true
+    },
+    {
+      "text": "νερό",
+      "translations": [
+        "water"
+      ],
+      "audioURL": "https://audio.example/lex-44.mp3",
+      "isNew": true
+    },
+    {
+      "text": "δέντρο",
+      "translations": [
+        "tree"
+      ],
+      "audioURL": "https://audio.example/lex-45.mp3",
+      "isNew": false
+    },
+    {
+      "text": "παράθυρο",
+      "translations": [
+        "window"
+      ],
+      "audioURL": "https://audio.example/lex-46.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πέντε",
+      "translations": [
+        "five"
+      ],
+      "audioURL": "https://audio.example/lex-47.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πολύ",
+      "translations": [
+        "very",
+        "a lot"
+      ],
+      "audioURL": "https://audio.example/lex-48.mp3",
+      "isNew": true
+    },
+    {
+      "text": "ποτέ",
+      "translations": [
+        "never"
+      ],
+      "audioURL": "https://audio.example/lex-49.mp3",
+      "isNew": true
+    },
+    {
+      "text": "που",
+      "translations": [
+        "where",
+        "that"
+      ],
+      "audioURL": null,
+      "isNew": false
+    }
+  ],
+  "pagination": {
+    "totalLexemes": 50,
+    "requestedPageSize": 50,
+    "pageSize": 20,
+    "previousStartIndex": 0,
+    "nextStartIndex": null
+  }
+}

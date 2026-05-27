@@ -1,0 +1,256 @@
+{
+  "learnedLexemes": [
+    {
+      "text": "γεια σου",
+      "translations": [
+        "hello"
+      ],
+      "audioURL": "https://audio.example/lex-01.mp3",
+      "isNew": true
+    },
+    {
+      "text": "καλή νύχτα",
+      "translations": [
+        "good night"
+      ],
+      "audioURL": "https://audio.example/lex-02.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πώς είσαι",
+      "translations": [
+        "how are you"
+      ],
+      "audioURL": "https://audio.example/lex-03.mp3",
+      "isNew": false
+    },
+    {
+      "text": "σ' αγαπώ",
+      "translations": [
+        "I love you"
+      ],
+      "audioURL": "https://audio.example/lex-04.mp3",
+      "isNew": true
+    },
+    {
+      "text": "ευχαριστώ πολύ",
+      "translations": [
+        "thank you very much"
+      ],
+      "audioURL": null,
+      "isNew": true
+    },
+    {
+      "text": "πρόβλημα",
+      "translations": [
+        "problem"
+      ],
+      "audioURL": "https://audio.example/lex-06.mp3",
+      "isNew": true
+    },
+    {
+      "text": "όνομα",
+      "translations": [
+        "name"
+      ],
+      "audioURL": "https://audio.example/lex-07.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μάθημα",
+      "translations": [
+        "lesson"
+      ],
+      "audioURL": "https://audio.example/lex-08.mp3",
+      "isNew": false
+    },
+    {
+      "text": "γράμμα",
+      "translations": [
+        "letter"
+      ],
+      "audioURL": "https://audio.example/lex-09.mp3",
+      "isNew": true
+    },
+    {
+      "text": "παιδί",
+      "translations": [
+        "child"
+      ],
+      "audioURL": "https://audio.example/lex-10.mp3",
+      "isNew": true
+    },
+    {
+      "text": "σπίτι",
+      "translations": [
+        "house",
+        "home"
+      ],
+      "audioURL": "https://audio.example/lex-11.mp3",
+      "isNew": true
+    },
+    {
+      "text": "τραπέζι",
+      "translations": [
+        "table"
+      ],
+      "audioURL": "https://audio.example/lex-12.mp3",
+      "isNew": false
+    },
+    {
+      "text": "ψωμί",
+      "translations": [
+        "bread"
+      ],
+      "audioURL": null,
+      "isNew": true
+    },
+    {
+      "text": "αγόρι",
+      "translations": [
+        "boy"
+      ],
+      "audioURL": "https://audio.example/lex-14.mp3",
+      "isNew": true
+    },
+    {
+      "text": "άντρας",
+      "translations": [
+        "man"
+      ],
+      "audioURL": "https://audio.example/lex-15.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πατέρας",
+      "translations": [
+        "father"
+      ],
+      "audioURL": "https://audio.example/lex-16.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μήνας",
+      "translations": [
+        "month"
+      ],
+      "audioURL": "https://audio.example/lex-17.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μαθητής",
+      "translations": [
+        "student (m.)"
+      ],
+      "audioURL": "https://audio.example/lex-18.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πελάτης",
+      "translations": [
+        "customer",
+        "client"
+      ],
+      "audioURL": "https://audio.example/lex-19.mp3",
+      "isNew": false
+    },
+    {
+      "text": "φίλος",
+      "translations": [
+        "friend (m.)"
+      ],
+      "audioURL": "https://audio.example/lex-20.mp3",
+      "isNew": true
+    },
+    {
+      "text": "άνθρωπος",
+      "translations": [
+        "person",
+        "human"
+      ],
+      "audioURL": "https://audio.example/lex-21.mp3",
+      "isNew": true
+    },
+    {
+      "text": "δρόμος",
+      "translations": [
+        "road",
+        "street"
+      ],
+      "audioURL": "https://audio.example/lex-22.mp3",
+      "isNew": true
+    },
+    {
+      "text": "χρόνος",
+      "translations": [
+        "time",
+        "year"
+      ],
+      "audioURL": "https://audio.example/lex-23.mp3",
+      "isNew": true
+    },
+    {
+      "text": "ουρανός",
+      "translations": [
+        "sky"
+      ],
+      "audioURL": "https://audio.example/lex-24.mp3",
+      "isNew": false
+    },
+    {
+      "text": "γράφω",
+      "translations": [
+        "I write"
+      ],
+      "audioURL": "https://audio.example/lex-25.mp3",
+      "isNew": true
+    },
+    {
+      "text": "διαβάζω",
+      "translations": [
+        "I read"
+      ],
+      "audioURL": "https://audio.example/lex-26.mp3",
+      "isNew": true
+    },
+    {
+      "text": "βλέπω",
+      "translations": [
+        "I see"
+      ],
+      "audioURL": "https://audio.example/lex-27.mp3",
+      "isNew": true
+    },
+    {
+      "text": "πίνω",
+      "translations": [
+        "I drink"
+      ],
+      "audioURL": "https://audio.example/lex-28.mp3",
+      "isNew": true
+    },
+    {
+      "text": "αγαπώ",
+      "translations": [
+        "I love"
+      ],
+      "audioURL": "https://audio.example/lex-29.mp3",
+      "isNew": true
+    },
+    {
+      "text": "μιλώ",
+      "translations": [
+        "I speak"
+      ],
+      "audioURL": null,
+      "isNew": false
+    }
+  ],
+  "pagination": {
+    "totalLexemes": 50,
+    "requestedPageSize": 50,
+    "pageSize": 30,
+    "previousStartIndex": null,
+    "nextStartIndex": 50
+  }
+}

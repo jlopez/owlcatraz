@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or open-ended discussion
+    url: https://github.com/jlopez/owlcatraz/discussions
+    about: For "how do I…", design conversations, or feature ideas. Discussions keep the Issues tab focused on actionable bugs.
+  - name: Security vulnerability
+    url: https://github.com/jlopez/owlcatraz/blob/main/SECURITY.md
+    about: Please do not report security issues in public. See SECURITY.md for the disclosure process.

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome", "node", "vite/client"],
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/tests.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "manifest.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}
