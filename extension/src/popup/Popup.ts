@@ -46,7 +46,8 @@ function renderStats(result: FullSyncResult): string {
       <tr><td>Words fetched</td><td>${String(result.lexemeCount)}</td></tr>
       <tr><td>Enriched</td><td>${String(result.enrichmentCount)}</td></tr>
       <tr><td>Added to Anki</td><td>${String(r.added)}</td></tr>
-      <tr><td>Skipped (duplicates)</td><td>${String(r.skipped)}</td></tr>
+      <tr><td>Updated (rebuild)</td><td>${String(r.updated)}</td></tr>
+      <tr><td>Skipped (already current)</td><td>${String(r.skipped)}</td></tr>
       <tr><td>Audio stored</td><td>${String(r.audioStored)}</td></tr>
       <tr><td>Audio failed</td><td>${String(r.audioFailed)}</td></tr>
       <tr><td>Failed</td><td>${String(r.failed.length)}</td></tr>

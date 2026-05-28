@@ -58,8 +58,15 @@ export function inferMorphology(lexeme: Lexeme): MorphologyResult {
     };
   }
 
-  // Rule 3: -ί / -ι neuter (high), length > 2
-  if (text.length > 2 && endsWithAny(text, ['ί', 'ι'])) {
+  // Rule 3: -ί / -ι neuter (high), length > 2, but NOT -οι/-ει/-αι.
+  // - -οι: masculine plural (σκύλοι, φίλοι, κύριοι).
+  // - -ει: 3sg present indicative for many verbs (παίζει, γράφει, τρώει).
+  // - -αι: είναι (and rare nouns like τσάι — false-negative is fine, LLM
+  //   classifies correctly via rule 10).
+  // Without these exclusions the synthesizer short-circuits to "neuter
+  // singular, article=το" and the note is wrong on every axis (verified
+  // empirically with σκύλοι → "το σκύλοι", είναι → "το είναι").
+  if (text.length > 2 && endsWithAny(text, ['ί', 'ι']) && !endsWithAny(text, ['οι', 'ει', 'αι'])) {
     return {
       text,
       pos: 'noun',

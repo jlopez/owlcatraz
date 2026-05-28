@@ -502,6 +502,103 @@ describe('enrichLexemes — validation', () => {
     ).rejects.toThrow(/invalid article/);
   });
 
+  it('strips article, gender, number on non-nouns even when LLM returns them', async () => {
+    // Regression: Haiku occasionally returns e.g. `pos:"adjective",
+    // article:"ο"` for μάλλινος. Without sanitization these phantom fields
+    // surface in Anki as "ο μάλλινος" — the article belongs to the modified
+    // noun, not to the adjective itself.
+    const fetchImpl = vi.fn(async () =>
+      mockToolResponse([
+        {
+          text: 'μάλλινος',
+          pos: 'adjective',
+          gender: 'm',
+          number: 'singular',
+          article: 'ο',
+          lemma: 'μάλλινος',
+          notes: 'woollen',
+        },
+      ]),
+    ) as unknown as typeof fetch;
+    const result = await enrichLexemes([needsLlm('μάλλινος')], {
+      apiKey: 'sk',
+      storage: memoryStorage(),
+      fetchImpl,
+    });
+    expect(result[0]).toMatchObject({
+      text: 'μάλλινος',
+      pos: 'adjective',
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'μάλλινος',
+      notes: 'woollen',
+    });
+  });
+
+  it('preserves gender/number/article on nouns', async () => {
+    const fetchImpl = vi.fn(async () =>
+      mockToolResponse([
+        {
+          text: 'σκύλοι',
+          pos: 'noun',
+          gender: 'm',
+          number: 'plural',
+          article: 'οι',
+          lemma: 'σκύλος',
+          inflection: 'plural of σκύλος',
+        },
+      ]),
+    ) as unknown as typeof fetch;
+    const result = await enrichLexemes([needsLlm('σκύλοι')], {
+      apiKey: 'sk',
+      storage: memoryStorage(),
+      fetchImpl,
+    });
+    expect(result[0]).toMatchObject({
+      pos: 'noun',
+      gender: 'm',
+      number: 'plural',
+      article: 'οι',
+      lemma: 'σκύλος',
+    });
+  });
+
+  it('accepts pos="article" for Greek articles like οι/η/το', async () => {
+    // Regression: the LLM correctly classifies οι/τα/τον/την as `article`
+    // (the precise Greek grammatical category). Before adding article to the
+    // enum, validation rejected the whole batch and the sync aborted before
+    // touching Anki. Sanitization still strips noun-only fields.
+    const fetchImpl = vi.fn(async () =>
+      mockToolResponse([
+        {
+          text: 'οι',
+          pos: 'article',
+          gender: 'm',
+          number: 'plural',
+          article: null,
+          lemma: 'οι',
+          notes: 'masc/fem nominative plural definite article',
+        },
+      ]),
+    ) as unknown as typeof fetch;
+    const result = await enrichLexemes([needsLlm('οι')], {
+      apiKey: 'sk',
+      storage: memoryStorage(),
+      fetchImpl,
+    });
+    expect(result[0]).toMatchObject({
+      text: 'οι',
+      pos: 'article',
+      // Stripped: gender/number/article are noun-only attributes.
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'οι',
+      notes: 'masc/fem nominative plural definite article',
+    });
+  });
+
   it('accepts null article (for non-nouns)', async () => {
     const fetchImpl = vi.fn(async () =>
       mockToolResponse([{ text: 'γράφω', pos: 'verb', article: null, lemma: 'γράφω' }]),
