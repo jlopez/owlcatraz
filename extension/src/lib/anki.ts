@@ -7,6 +7,19 @@ const ANKI_CONNECT_VERSION = 6;
 const NOTE_TAGS_BASE = 'duolingo';
 const AUDIO_FILENAME_PREFIX = 'duolingo_';
 
+// Bump on any change that alters note content or card templates: morphology
+// rule edits, enrichment validation tightening, buildFields output, or
+// CARD_TEMPLATES. Existing notes whose `owlcatraz:build:N` tag is below
+// BUILD_VERSION get re-rendered through updateNoteFields on the next sync
+// (and the template gets re-pushed via updateModelTemplates). This is how
+// the deck self-heals without manual delete-and-resync.
+//
+// v2: rule-3 -οι/-ει/-αι exclusions; enrichment article-on-non-noun
+// sanitization; Recognition card typing prompt = TargetWithArticle.
+const BUILD_VERSION = 2;
+const BUILD_TAG_PREFIX = 'owlcatraz:build:';
+const BUILD_TAG_CURRENT = `${BUILD_TAG_PREFIX}${String(BUILD_VERSION)}`;
+
 export interface NoteData {
   lexeme: Lexeme;
   enrichment: Enrichment;
@@ -25,6 +38,7 @@ export interface SyncOptions {
 export interface SyncResult {
   added: number;
   skipped: number;
+  updated: number;
   audioStored: number;
   audioFailed: number;
   failed: { lemmaKey: string; reason: string }[];
@@ -64,9 +78,13 @@ interface CardTemplate {
 const CARD_TEMPLATES: readonly CardTemplate[] = [
   {
     Name: 'Recognition',
+    // Typing prompt is the article-prefixed form so the learner internalizes
+    // the gender alongside the noun (standard pedagogy for grammatically
+    // gendered languages). TargetWithArticle equals Target for non-nouns —
+    // no article means the prompt is the bare surface form.
     Front: `<div class="english">{{English}}</div>
 {{#Audio}}<div class="audio-hint">Listen first?</div>{{/Audio}}
-<div class="type-prompt">{{type:Target}}</div>`,
+<div class="type-prompt">{{type:TargetWithArticle}}</div>`,
     Back: `{{FrontSide}}
 <hr>
 <div class="target-large">{{TargetWithArticle}}</div>
@@ -212,6 +230,28 @@ export async function ensureNoteType(modelName: string, options: InvokeOptions):
           `Rename or delete the existing model in Anki, or pass a different modelName in extension settings.`,
       );
     }
+    // Push current templates so existing decks pick up Recognition/Production
+    // edits when BUILD_VERSION is bumped. updateModelTemplates re-renders
+    // existing cards in place — review history is preserved. Idempotent at
+    // the Anki layer if the templates are already current, but we avoid the
+    // call when the stored templates already match to skip needless writes.
+    const storedRaw = await ankiInvoke<unknown>('modelTemplates', { modelName }, options);
+    const stored = storedRaw as Record<string, { Front?: string; Back?: string }> | null;
+    let templatesMatch = stored !== null && typeof stored === 'object';
+    if (templatesMatch && stored !== null) {
+      for (const t of CARD_TEMPLATES) {
+        const have = stored[t.Name];
+        if (!have || have.Front !== t.Front || have.Back !== t.Back) {
+          templatesMatch = false;
+          break;
+        }
+      }
+    }
+    if (!templatesMatch) {
+      const templates: Record<string, { Front: string; Back: string }> = {};
+      for (const t of CARD_TEMPLATES) templates[t.Name] = { Front: t.Front, Back: t.Back };
+      await ankiInvoke('updateModelTemplates', { model: { name: modelName, templates } }, options);
+    }
     return;
   }
   await ankiInvoke(
@@ -300,31 +340,53 @@ interface BuiltNote {
   language: string;
 }
 
-// Query Anki for every note already in our deck under our model, and return
-// the set of their LemmaKey values. Lets syncToAnki skip already-synced
-// lexemes entirely — without this, a re-sync downloads every audio file and
-// uploads every note before discovering them as duplicates.
-async function fetchExistingLemmaKeys(
+interface ExistingNote {
+  noteId: number;
+  fields: Record<string, string>;
+  tags: string[];
+}
+
+// Query Anki for every note already in our deck under our model, returning
+// the existing note metadata (id, fields, tags) keyed by LemmaKey. Lets
+// syncToAnki:
+//   1. skip notes whose build tag is current (no audio fetch, no addNotes);
+//   2. update notes whose build tag is older (changed fields rebuilt in
+//      place via updateNoteFields, preserving review history); and
+//   3. compare candidate fields against existing ones to skip no-op writes
+//      so AnkiWeb sync deltas only include actually-changed notes.
+async function fetchExistingNotes(
   deckName: string,
   modelName: string,
   invokeOpts: InvokeOptions,
-): Promise<Set<string>> {
+): Promise<Map<string, ExistingNote>> {
   const query = `deck:"${escapeAnkiQueryValue(deckName)}" note:"${escapeAnkiQueryValue(modelName)}"`;
   const ids = await ankiInvoke<unknown>('findNotes', { query }, invokeOpts);
-  if (!Array.isArray(ids) || ids.length === 0) return new Set();
+  const out = new Map<string, ExistingNote>();
+  if (!Array.isArray(ids) || ids.length === 0) return out;
   const info = await ankiInvoke<unknown>('notesInfo', { notes: ids }, invokeOpts);
-  const keys = new Set<string>();
-  if (!Array.isArray(info)) return keys;
+  if (!Array.isArray(info)) return out;
   for (const note of info) {
     if (typeof note !== 'object' || note === null) continue;
-    const fields = (note as Record<string, unknown>)['fields'];
-    if (typeof fields !== 'object' || fields === null) continue;
-    const lemmaField = (fields as Record<string, unknown>)['LemmaKey'];
-    if (typeof lemmaField !== 'object' || lemmaField === null) continue;
-    const value = (lemmaField as Record<string, unknown>)['value'];
-    if (typeof value === 'string') keys.add(value);
+    const n = note as Record<string, unknown>;
+    const noteId = typeof n['noteId'] === 'number' ? n['noteId'] : null;
+    const fieldsRaw = n['fields'];
+    if (noteId === null || typeof fieldsRaw !== 'object' || fieldsRaw === null) continue;
+    const fields: Record<string, string> = {};
+    for (const [name, entry] of Object.entries(fieldsRaw as Record<string, unknown>)) {
+      if (typeof entry === 'object' && entry !== null) {
+        const value = (entry as Record<string, unknown>)['value'];
+        if (typeof value === 'string') fields[name] = value;
+      }
+    }
+    const lemmaKey = fields['LemmaKey'];
+    if (typeof lemmaKey !== 'string' || lemmaKey === '') continue;
+    const tagsRaw = n['tags'];
+    const tags: string[] = Array.isArray(tagsRaw)
+      ? tagsRaw.filter((t) => typeof t === 'string')
+      : [];
+    out.set(lemmaKey, { noteId, fields, tags });
   }
-  return keys;
+  return out;
 }
 
 async function maybeStoreAudio(
@@ -364,10 +426,54 @@ async function maybeStoreAudio(
   return `[sound:${filename}]`;
 }
 
+function hasCurrentBuildTag(tags: readonly string[]): boolean {
+  return tags.includes(BUILD_TAG_CURRENT);
+}
+
+// Matches only the auto-managed numeric build-version tags (owlcatraz:build:0,
+// owlcatraz:build:1, …). Narrower than `startsWith(BUILD_TAG_PREFIX)` so a
+// user who manually tags notes with anything else under the same prefix
+// (owlcatraz:build:in-review, etc.) doesn't lose those tags on heal.
+const STALE_BUILD_TAG_RE = /^owlcatraz:build:\d+$/;
+
+// Build the next tag list for a note: keep everything that isn't an
+// auto-managed build-version tag, then add BUILD_TAG_CURRENT. Strips stale
+// `owlcatraz:build:N` numeric tags so a note doesn't accumulate one tag per
+// build version over its lifetime.
+function nextTags(prev: readonly string[], language: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of prev) {
+    if (STALE_BUILD_TAG_RE.test(t)) continue;
+    if (!seen.has(t)) {
+      out.push(t);
+      seen.add(t);
+    }
+  }
+  for (const required of [NOTE_TAGS_BASE, language, BUILD_TAG_CURRENT]) {
+    if (!seen.has(required)) {
+      out.push(required);
+      seen.add(required);
+    }
+  }
+  return out;
+}
+
+function fieldsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
 export async function syncToAnki(notes: NoteData[], options: SyncOptions): Promise<SyncResult> {
   const result: SyncResult = {
     added: 0,
     skipped: 0,
+    updated: 0,
     audioStored: 0,
     audioFailed: 0,
     failed: [],
@@ -389,19 +495,102 @@ export async function syncToAnki(notes: NoteData[], options: SyncOptions): Promi
 
   if (notes.length === 0) return result;
 
-  const existingKeys = await fetchExistingLemmaKeys(options.deckName, modelName, invokeOpts);
+  const existingByKey = await fetchExistingNotes(options.deckName, modelName, invokeOpts);
 
-  const built: BuiltNote[] = [];
+  // Three-way split:
+  // - currentSkip: existing note already at BUILD_TAG_CURRENT → nothing to do.
+  // - toUpdate: existing note at older build → updateNoteFields (if fields
+  //   differ) + replaceTags. Audio is re-fetched only when the existing
+  //   Audio field is empty (e.g. v1 had audio-fetch failure that we want to
+  //   retry under v2). Otherwise we keep the existing Audio value so the
+  //   user's already-stored MP3 isn't dropped.
+  // - toAdd: no existing note → audio fetch + addNotes.
+  // Critical invariant: notes are NEVER deleted-and-recreated in the update
+  // path. updateNoteFields mutates in place; cards keep their full review
+  // scheduling/history.
+  interface UpdateCandidate {
+    lemmaKey: string;
+    existing: ExistingNote;
+    note: NoteData;
+  }
+  const toUpdate: UpdateCandidate[] = [];
+  const toAddInputs: { lemmaKey: string; note: NoteData }[] = [];
   for (const note of notes) {
     const lemmaKey = computeLemmaKey(note);
-    if (existingKeys.has(lemmaKey)) {
-      // Skip already-synced lexemes before paying for audio fetch + storeMedia.
-      result.skipped += 1;
-      continue;
+    const existing = existingByKey.get(lemmaKey);
+    if (existing) {
+      if (hasCurrentBuildTag(existing.tags)) {
+        result.skipped += 1;
+        continue;
+      }
+      toUpdate.push({ lemmaKey, existing, note });
+    } else {
+      toAddInputs.push({ lemmaKey, note });
     }
-    const audioField = await maybeStoreAudio(note, options, invokeOpts, result);
-    const { fields } = buildFields(note, audioField);
-    built.push({ lemmaKey, fields, language: note.language });
+  }
+
+  for (const u of toUpdate) {
+    // Reuse existing Audio if present — avoids re-downloading every MP3 just
+    // because we bumped build version. If the existing Audio is empty (e.g.
+    // a prior audio fetch failed), try again now.
+    //
+    // Known limitations (intentional trade-offs):
+    // - If the existing [sound:duolingo_<hash>.mp3] reference points at a
+    //   file the user has since deleted from Anki's media folder, the
+    //   broken reference is preserved. Detecting this would require a
+    //   getMediaFilesNames roundtrip per sync. Workaround: clear the Audio
+    //   field on the affected note and re-sync.
+    // - If Duolingo rotated the lexeme's audioURL (CDN churn, re-recording),
+    //   the hash-derived filename no longer matches the current URL but the
+    //   stale file plays correctly. Same-lemma re-recordings stay locked to
+    //   the older version. Same workaround.
+    const existingAudio = u.existing.fields['Audio'] ?? '';
+    // Wrap the per-note update so a single AnkiConnect failure (rejected
+    // field shape, deck rename mid-sync, network glitch) doesn't kill the
+    // whole heal. Mirrors the per-null classification on the addNotes path
+    // — surface each failure through result.failed and continue.
+    try {
+      const audioField =
+        existingAudio !== ''
+          ? existingAudio
+          : await maybeStoreAudio(u.note, options, invokeOpts, result);
+      const { fields } = buildFields(u.note, audioField);
+      const nextTagList = nextTags(u.existing.tags, u.note.language);
+      const fieldsChanged = !fieldsEqual(fields, u.existing.fields);
+      if (fieldsChanged) {
+        await ankiInvoke(
+          'updateNoteFields',
+          { note: { id: u.existing.noteId, fields } },
+          invokeOpts,
+        );
+        result.updated += 1;
+      } else {
+        // No content change — still counts as a skip from the user's POV.
+        result.skipped += 1;
+      }
+      // Tag swap is cheap and lets the next sync short-circuit. Issue even
+      // when fields were unchanged so the build tag advances. If this throws
+      // we still keep updated/skipped counts above accurate — the failure
+      // gets recorded but the field update already landed (next sync will
+      // retry only the tag swap via the same code path).
+      await ankiInvoke(
+        'updateNoteTags',
+        { note: u.existing.noteId, tags: nextTagList },
+        invokeOpts,
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      result.failed.push({ lemmaKey: u.lemmaKey, reason: `update failed: ${reason}` });
+    }
+  }
+
+  if (toAddInputs.length === 0) return result;
+
+  const built: BuiltNote[] = [];
+  for (const ta of toAddInputs) {
+    const audioField = await maybeStoreAudio(ta.note, options, invokeOpts, result);
+    const { fields } = buildFields(ta.note, audioField);
+    built.push({ lemmaKey: ta.lemmaKey, fields, language: ta.note.language });
   }
 
   if (built.length === 0) return result;
@@ -419,18 +608,19 @@ export async function syncToAnki(notes: NoteData[], options: SyncOptions): Promi
         checkAllModels: false,
       },
     },
-    tags: [NOTE_TAGS_BASE, b.language],
+    tags: [NOTE_TAGS_BASE, b.language, BUILD_TAG_CURRENT],
   }));
 
   // AnkiConnect's addNotes diverges from the documented per-id-null result
   // when notes fail to insert: it rolls the entire batch back and surfaces a
   // top-level error `"['cannot create note because it is a duplicate', …]"`
-  // with one entry per failed note. On the second sync every note is a
-  // deck-level duplicate, so this is the hot path for re-runs. When the count
-  // of duplicate messages matches the batch size, treat the call as `[null,
-  // null, …]` and let the findNotes-based per-note classifier below decide
-  // skipped vs. truly-failed. Any other shape (partial failures, non-dup
-  // errors) rethrows so we don't silently drop unknown failures.
+  // with one entry per failed note. Less likely now that we preflight via
+  // fetchExistingNotes, but a note could still be created in Anki between
+  // our preflight and addNotes. When the count of duplicate messages
+  // matches the batch size, treat the call as `[null, null, …]` and let the
+  // findNotes-based per-note classifier below decide skipped vs. truly-failed.
+  // Any other shape (partial failures, non-dup errors) rethrows so we don't
+  // silently drop unknown failures.
   let ids: (number | null)[];
   try {
     ids = await ankiInvoke<(number | null)[]>('addNotes', { notes: ankiNotes }, invokeOpts);
@@ -489,4 +679,7 @@ export const __test = {
   CARD_TEMPLATES,
   DEFAULT_MODEL_NAME,
   DEFAULT_ANKI_URL,
+  BUILD_VERSION,
+  BUILD_TAG_CURRENT,
+  BUILD_TAG_PREFIX,
 };

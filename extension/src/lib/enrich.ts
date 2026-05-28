@@ -12,9 +12,12 @@ const TOOL_NAME = 'record_enrichments';
 // into a subsequent batch lets a single retry recover them; the cap exists
 // only to bound total work if the LLM is genuinely refusing one input.
 const MAX_ATTEMPTS_PER_ITEM = 3;
-// Bump this prefix if the Enrichment shape changes — old cache entries become
-// invisible (rather than silently mis-typed) on the next run.
-const CACHE_PREFIX = 'enrich:v1:';
+// Bump this prefix if the Enrichment shape changes OR if validation rules
+// tighten enough that previously-cached entries would now be wrong. Old
+// entries become invisible (rather than silently mis-typed) on the next run.
+// v2: validateEnrichment now strips gender/number/article on non-nouns;
+// v1 entries for adjectives leaked phantom articles (μάλλινος → "ο μάλλινος").
+const CACHE_PREFIX = 'enrich:v2:';
 // A full batch of 100 enrichments easily exceeds 4096 (~50-180 output tokens
 // each); 16k leaves comfortable headroom without burning quota on aborted
 // generations. Haiku 4.5 supports up to 64k.
@@ -338,12 +341,21 @@ function validateEnrichment(item: unknown, inputTexts: ReadonlySet<string>): Enr
   if (notesRaw !== null && typeof notesRaw !== 'string') {
     throw new Error(`enrichLexemes: enrichment for "${text}" has invalid notes`);
   }
+  const posTyped = pos as EnrichmentPOS;
+  // Gender/number/article are noun-only attributes. Adjectives, verbs,
+  // pronouns etc. don't carry an inherent definite article — when they
+  // surface in text alongside an article it belongs to the modified noun.
+  // Haiku occasionally returns e.g. `pos: "adjective", article: "ο"` for
+  // μάλλινος; the schema description says "null for non-nouns" but isn't
+  // enforced. Force-null here so the wrong fields can't leak into Anki or
+  // the cache.
+  const isNoun = posTyped === 'noun';
   return {
     text,
-    pos: pos as EnrichmentPOS,
-    gender: genderRaw as EnrichmentGender | null,
-    number: numberRaw as EnrichmentNumber | null,
-    article: articleRaw,
+    pos: posTyped,
+    gender: isNoun ? (genderRaw as EnrichmentGender | null) : null,
+    number: isNoun ? (numberRaw as EnrichmentNumber | null) : null,
+    article: isNoun ? articleRaw : null,
     lemma,
     inflection: inflectionRaw,
     notes: notesRaw,

@@ -79,6 +79,17 @@ function enr(overrides: Partial<Enrichment> & { text: string; lemma: string }): 
   };
 }
 
+// modelTemplates handler that mirrors the in-code CARD_TEMPLATES exactly so
+// ensureNoteType detects the templates as already-current and does NOT issue
+// updateModelTemplates. Use this in tests that don't care about the
+// template-self-heal path. Tests that specifically exercise the self-heal
+// override modelTemplates with deliberately-stale content.
+function currentTemplates(): Record<string, { Front: string; Back: string }> {
+  const out: Record<string, { Front: string; Back: string }> = {};
+  for (const t of __test.CARD_TEMPLATES) out[t.Name] = { Front: t.Front, Back: t.Back };
+  return out;
+}
+
 describe('ankiInvoke', () => {
   it('POSTs the configured URL with the right shape and returns the result', async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -160,16 +171,52 @@ describe('ensureDeck', () => {
 });
 
 describe('ensureNoteType', () => {
-  it('does not call createModel when the model already exists with matching fields', async () => {
+  it('does not call createModel or updateModelTemplates when model is current', async () => {
     const { fetchImpl, calls } = mockAnki({
       modelNames: () => ['Basic', 'Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      createModel: () => {
+        throw new Error('should not be called');
+      },
+      updateModelTemplates: () => {
+        throw new Error('should not be called when templates already match');
+      },
+    });
+    await ensureNoteType('Duolingo Word', { fetchImpl });
+    expect(calls.map((c) => c.action)).toEqual(['modelNames', 'modelFieldNames', 'modelTemplates']);
+  });
+
+  it('pushes updateModelTemplates when stored templates differ (build version bumped)', async () => {
+    // Self-heal: when the user's deck already has the note type but the
+    // template HTML has drifted (e.g. BUILD_VERSION bumped to swap
+    // {{type:Target}} for {{type:TargetWithArticle}}), push the new
+    // templates. updateModelTemplates re-renders existing cards without
+    // touching scheduling history.
+    let updatePayload: Record<string, unknown> | null = null;
+    const { fetchImpl } = mockAnki({
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => ({
+        Recognition: { Front: 'OUTDATED', Back: 'OUTDATED' },
+        Production: { Front: 'OUTDATED', Back: 'OUTDATED' },
+      }),
+      updateModelTemplates: (params) => {
+        updatePayload = params;
+        return null;
+      },
       createModel: () => {
         throw new Error('should not be called');
       },
     });
     await ensureNoteType('Duolingo Word', { fetchImpl });
-    expect(calls.map((c) => c.action)).toEqual(['modelNames', 'modelFieldNames']);
+    expect(updatePayload).not.toBeNull();
+    const p = updatePayload as unknown as {
+      model: { name: string; templates: Record<string, { Front: string; Back: string }> };
+    };
+    expect(p.model.name).toBe('Duolingo Word');
+    expect(p.model.templates['Recognition']?.Front).toContain('{{type:TargetWithArticle}}');
+    expect(p.model.templates['Production']?.Front).toContain('{{TargetWithArticle}}');
   });
 
   it('throws an actionable error when an existing model has different fields', async () => {
@@ -178,6 +225,9 @@ describe('ensureNoteType', () => {
       modelFieldNames: () => ['Front', 'Back'],
       createModel: () => {
         throw new Error('should not be called');
+      },
+      updateModelTemplates: () => {
+        throw new Error('should not be reached: should throw on field-shape mismatch first');
       },
     });
     await expect(ensureNoteType('Duolingo Word', { fetchImpl })).rejects.toThrow(
@@ -220,7 +270,10 @@ describe('ensureNoteType', () => {
     expect(p.css).toBe(__test.NOTE_TYPE_CSS);
     expect(p.cardTemplates).toHaveLength(2);
     expect(p.cardTemplates[0]?.Name).toBe('Recognition');
-    expect(p.cardTemplates[0]?.Front).toContain('{{type:Target}}');
+    // Typing prompt is article-prefixed: learner internalizes gender with the
+    // noun. TargetWithArticle === Target when there is no article.
+    expect(p.cardTemplates[0]?.Front).toContain('{{type:TargetWithArticle}}');
+    expect(p.cardTemplates[0]?.Front).not.toContain('{{type:Target}}');
     expect(p.cardTemplates[0]?.Back).toContain('{{FrontSide}}');
     expect(p.cardTemplates[0]?.Back).toContain('{{TargetWithArticle}}');
     expect(p.cardTemplates[1]?.Name).toBe('Production');
@@ -306,6 +359,7 @@ describe('syncToAnki — happy path', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       storeMediaFile: (params) => {
         storeMediaCount += 1;
@@ -331,6 +385,7 @@ describe('syncToAnki — happy path', () => {
     expect(result).toEqual({
       added: 3,
       skipped: 0,
+      updated: 0,
       audioStored: 1,
       audioFailed: 0,
       failed: [],
@@ -361,7 +416,8 @@ describe('syncToAnki — happy path', () => {
     };
     expect(ap.notes).toHaveLength(3);
     expect(ap.notes[0]?.deckName).toBe('Duolingo::Greek');
-    expect(ap.notes[0]?.tags).toEqual(['duolingo', 'el']);
+    // New notes carry the current build tag so the next sync can short-circuit.
+    expect(ap.notes[0]?.tags).toEqual(['duolingo', 'el', __test.BUILD_TAG_CURRENT]);
     expect(ap.notes[0]?.fields['LemmaKey']).toBe('el:σκύλος:σκύλος');
     expect(ap.notes[0]?.fields['TargetWithArticle']).toBe('ο σκύλος');
     expect(ap.notes[0]?.fields['POS']).toBe('noun (masc., sing.)');
@@ -410,6 +466,7 @@ describe('syncToAnki — preflight duplicate skip', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: (params) => {
         findNotesQuery = params['query'] as string;
         return [42];
@@ -418,7 +475,8 @@ describe('syncToAnki — preflight duplicate skip', () => {
         {
           noteId: 42,
           modelName: 'Duolingo Word',
-          tags: ['duolingo', 'el'],
+          // Build tag is current → preflight skip without fields rebuild.
+          tags: ['duolingo', 'el', __test.BUILD_TAG_CURRENT],
           fields: {
             LemmaKey: { value: 'el:b:b', order: 0 },
           },
@@ -471,12 +529,13 @@ describe('syncToAnki — preflight duplicate skip', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [99],
       notesInfo: () => [
         {
           noteId: 99,
           modelName: 'Duolingo Word',
-          tags: ['duolingo', 'el'],
+          tags: ['duolingo', 'el', __test.BUILD_TAG_CURRENT],
           fields: {
             LemmaKey: {
               value: 'el:με συγχωρείτε:με συγχωρείτε',
@@ -495,6 +554,366 @@ describe('syncToAnki — preflight duplicate skip', () => {
     });
     expect(result.skipped).toBe(1);
     expect(result.added).toBe(0);
+  });
+});
+
+describe('syncToAnki — build-version auto-heal', () => {
+  it('updates fields in place (preserves noteId) when build tag is older', async () => {
+    // Critical invariant: when a heuristic fix changes a note's content, we
+    // call updateNoteFields on the EXISTING noteId. Anki keeps scheduling
+    // history per-card, and cards stay attached to the note — so the user's
+    // review progress is preserved across the heal.
+    const notes: NoteData[] = [
+      {
+        language: 'el',
+        lexeme: lex({ text: 'σκύλοι', translations: ['dogs'] }),
+        enrichment: enr({
+          text: 'σκύλοι',
+          lemma: 'σκύλος',
+          pos: 'noun',
+          gender: 'm',
+          number: 'plural',
+          article: 'οι',
+          inflection: 'plural of σκύλος',
+        }),
+      },
+    ];
+    let updateNotePayload: Record<string, unknown> | null = null;
+    let updateTagsPayload: Record<string, unknown> | null = null;
+    const { fetchImpl } = mockAnki({
+      version: () => 6,
+      deckNames: () => ['Duolingo::Greek'],
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      findNotes: () => [777],
+      notesInfo: () => [
+        {
+          noteId: 777,
+          modelName: 'Duolingo Word',
+          // No build tag → treated as pre-BUILD_VERSION (e.g. v1 sync that
+          // synthesized neuter-singular by mistake).
+          tags: ['duolingo', 'el'],
+          fields: {
+            LemmaKey: { value: 'el:σκύλος:σκύλοι', order: 0 },
+            Language: { value: 'el', order: 1 },
+            English: { value: 'dogs', order: 2 },
+            Target: { value: 'σκύλοι', order: 3 },
+            TargetWithArticle: { value: 'το σκύλοι', order: 4 }, // ← old, wrong
+            Lemma: { value: 'σκύλοι', order: 5 }, // ← old, wrong
+            POS: { value: 'noun (neut., sing.)', order: 6 }, // ← old, wrong
+            Inflection: { value: '', order: 7 },
+            Notes: { value: '', order: 8 },
+            Audio: { value: '', order: 9 },
+          },
+        },
+      ],
+      updateNoteFields: (params) => {
+        updateNotePayload = params;
+        return null;
+      },
+      updateNoteTags: (params) => {
+        updateTagsPayload = params;
+        return null;
+      },
+      addNotes: () => {
+        throw new Error('addNotes must NOT be called on the update path');
+      },
+    });
+    const result = await syncToAnki(notes, { deckName: 'Duolingo::Greek', fetchImpl });
+    expect(result.added).toBe(0);
+    expect(result.skipped).toBe(0);
+    expect(result.updated).toBe(1);
+
+    expect(updateNotePayload).not.toBeNull();
+    const up = updateNotePayload as unknown as {
+      note: { id: number; fields: Record<string, string> };
+    };
+    // Note ID preserved — same review history.
+    expect(up.note.id).toBe(777);
+    // Fields rebuilt with corrected enrichment.
+    expect(up.note.fields['TargetWithArticle']).toBe('οι σκύλοι');
+    expect(up.note.fields['Lemma']).toBe('σκύλος');
+    expect(up.note.fields['POS']).toBe('noun (masc., pl.)');
+
+    expect(updateTagsPayload).not.toBeNull();
+    const tp = updateTagsPayload as unknown as { note: number; tags: string[] };
+    expect(tp.note).toBe(777);
+    expect(tp.tags).toContain(__test.BUILD_TAG_CURRENT);
+    expect(tp.tags).toContain('duolingo');
+    expect(tp.tags).toContain('el');
+  });
+
+  it('skips updateNoteFields when fields are byte-identical but still bumps the tag', async () => {
+    // Field-equality short-circuit: a note whose content didn't change between
+    // BUILD_VERSION bumps shouldn't show up as a modified note in AnkiWeb
+    // sync. We still issue updateNoteTags so the next sync short-circuits
+    // earlier.
+    const notes: NoteData[] = [
+      {
+        language: 'el',
+        lexeme: lex({ text: 'γάντι', translations: ['glove'] }),
+        enrichment: enr({
+          text: 'γάντι',
+          lemma: 'γάντι',
+          pos: 'noun',
+          gender: 'n',
+          number: 'singular',
+          article: 'το',
+        }),
+      },
+    ];
+    let updateNoteFieldsCalls = 0;
+    let updateTagsCalls = 0;
+    const { fetchImpl } = mockAnki({
+      version: () => 6,
+      deckNames: () => ['Duolingo::Greek'],
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      findNotes: () => [555],
+      notesInfo: () => [
+        {
+          noteId: 555,
+          modelName: 'Duolingo Word',
+          tags: ['duolingo', 'el'], // older build, no current tag
+          fields: {
+            LemmaKey: { value: 'el:γάντι:γάντι', order: 0 },
+            Language: { value: 'el', order: 1 },
+            English: { value: 'glove', order: 2 },
+            Target: { value: 'γάντι', order: 3 },
+            TargetWithArticle: { value: 'το γάντι', order: 4 },
+            Lemma: { value: 'γάντι', order: 5 },
+            POS: { value: 'noun (neut., sing.)', order: 6 },
+            Inflection: { value: '', order: 7 },
+            Notes: { value: '', order: 8 },
+            Audio: { value: '', order: 9 },
+          },
+        },
+      ],
+      updateNoteFields: () => {
+        updateNoteFieldsCalls += 1;
+        return null;
+      },
+      updateNoteTags: () => {
+        updateTagsCalls += 1;
+        return null;
+      },
+      addNotes: () => {
+        throw new Error('addNotes must NOT be called on the update path');
+      },
+    });
+    const result = await syncToAnki(notes, { deckName: 'Duolingo::Greek', fetchImpl });
+    expect(updateNoteFieldsCalls).toBe(0); // no-op write avoided
+    expect(updateTagsCalls).toBe(1); // tag still advances
+    expect(result.updated).toBe(0);
+    expect(result.skipped).toBe(1); // counts as a skip from the user's POV
+  });
+
+  it("strips stale build tags so notes don't accumulate one per version", async () => {
+    const notes: NoteData[] = [
+      {
+        language: 'el',
+        lexeme: lex({ text: 'a' }),
+        enrichment: enr({ text: 'a', lemma: 'a' }),
+      },
+    ];
+    let updateTagsPayload: Record<string, unknown> | null = null;
+    let updateNoteFieldsCalls = 0;
+    const { fetchImpl } = mockAnki({
+      version: () => 6,
+      deckNames: () => ['Duolingo::Greek'],
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      findNotes: () => [1],
+      notesInfo: () => [
+        {
+          noteId: 1,
+          modelName: 'Duolingo Word',
+          // Imagine a user who upgraded through several versions. Also
+          // includes a non-numeric "owlcatraz:build:in-review" tag the user
+          // added manually — narrower regex should preserve it.
+          tags: [
+            'duolingo',
+            'el',
+            'owlcatraz:build:1',
+            'owlcatraz:build:0',
+            'owlcatraz:build:in-review',
+            'custom',
+          ],
+          fields: {
+            LemmaKey: { value: 'el:a:a', order: 0 },
+            Language: { value: 'el', order: 1 },
+            English: { value: '', order: 2 },
+            Target: { value: 'a', order: 3 },
+            TargetWithArticle: { value: 'a', order: 4 },
+            Lemma: { value: 'a', order: 5 },
+            POS: { value: 'noun', order: 6 },
+            Inflection: { value: '', order: 7 },
+            Notes: { value: '', order: 8 },
+            Audio: { value: '', order: 9 },
+          },
+        },
+      ],
+      updateNoteFields: () => {
+        updateNoteFieldsCalls += 1;
+        return null;
+      },
+      updateNoteTags: (params) => {
+        updateTagsPayload = params;
+        return null;
+      },
+      addNotes: () => {
+        throw new Error('addNotes should not be reached');
+      },
+    });
+    await syncToAnki(notes, { deckName: 'Duolingo::Greek', fetchImpl });
+    // Fields are byte-identical → no-op write avoided (exercises fieldsEqual
+    // short-circuit + asserts the test isn't passing for the wrong reason).
+    expect(updateNoteFieldsCalls).toBe(0);
+    expect(updateTagsPayload).not.toBeNull();
+    const tp = updateTagsPayload as unknown as { tags: string[] };
+    // Stale numeric build tags removed, custom user tags preserved (including
+    // the non-numeric `owlcatraz:build:in-review`), current build tag added.
+    expect(tp.tags).not.toContain('owlcatraz:build:0');
+    expect(tp.tags).not.toContain('owlcatraz:build:1');
+    expect(tp.tags).toContain(__test.BUILD_TAG_CURRENT);
+    expect(tp.tags).toContain('custom');
+    expect(tp.tags).toContain('owlcatraz:build:in-review');
+    // No duplicates.
+    expect(new Set(tp.tags).size).toBe(tp.tags.length);
+  });
+
+  it('isolates per-note update failures (one bad note does not kill the heal)', async () => {
+    // Matches the addNotes path's per-null classification: a single
+    // updateNoteFields error must be recorded in result.failed and the loop
+    // must continue with the remaining notes. Previously a throw aborted the
+    // whole sync — a regression vs. addNotes resilience.
+    const notes: NoteData[] = [
+      { language: 'el', lexeme: lex({ text: 'a' }), enrichment: enr({ text: 'a', lemma: 'a' }) },
+      { language: 'el', lexeme: lex({ text: 'b' }), enrichment: enr({ text: 'b', lemma: 'b' }) },
+      { language: 'el', lexeme: lex({ text: 'c' }), enrichment: enr({ text: 'c', lemma: 'c' }) },
+    ];
+    const noteInfo = (id: number, key: string, text: string) => ({
+      noteId: id,
+      modelName: 'Duolingo Word',
+      tags: ['duolingo', 'el'], // older build → all three go to update path
+      fields: {
+        LemmaKey: { value: key, order: 0 },
+        Language: { value: 'el', order: 1 },
+        English: { value: '', order: 2 },
+        Target: { value: text, order: 3 },
+        TargetWithArticle: { value: text, order: 4 },
+        Lemma: { value: text, order: 5 },
+        // Wrong POS forces fieldsEqual=false so updateNoteFields is actually
+        // called (the fresh buildFields produces POS='noun' for our enr()).
+        POS: { value: 'noun (neut., sing.)', order: 6 },
+        Inflection: { value: '', order: 7 },
+        Notes: { value: '', order: 8 },
+        Audio: { value: '', order: 9 },
+      },
+    });
+    let updateCalls = 0;
+    const { fetchImpl } = mockAnki({
+      version: () => 6,
+      deckNames: () => ['Duolingo::Greek'],
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      findNotes: () => [1, 2, 3],
+      notesInfo: () => [
+        noteInfo(1, 'el:a:a', 'a'),
+        noteInfo(2, 'el:b:b', 'b'),
+        noteInfo(3, 'el:c:c', 'c'),
+      ],
+      updateNoteFields: (params) => {
+        updateCalls += 1;
+        const id = (params['note'] as { id: number }).id;
+        if (id === 2) {
+          return ankiResponse(null, 'note has invalid fields');
+        }
+        return null;
+      },
+      updateNoteTags: () => null,
+      addNotes: () => {
+        throw new Error('addNotes should not be reached on the update path');
+      },
+    });
+    const result = await syncToAnki(notes, { deckName: 'Duolingo::Greek', fetchImpl });
+    // All three notes were attempted (no early-abort).
+    expect(updateCalls).toBe(3);
+    // Note b failed and is recorded; a and c succeeded.
+    expect(result.updated).toBe(2);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0]?.lemmaKey).toBe('el:b:b');
+    expect(result.failed[0]?.reason).toMatch(/update failed.*invalid fields/);
+  });
+
+  it('preserves existing Audio field on update (avoids re-downloading MP3)', async () => {
+    // Re-fetching every MP3 just because we bumped BUILD_VERSION is wasteful
+    // and inflates audioStored counts. The existing [sound:…] reference stays.
+    const notes: NoteData[] = [
+      {
+        language: 'el',
+        lexeme: lex({
+          text: 'σκύλος',
+          translations: ['dog'],
+          audioURL: 'https://duo.example/skylos.mp3',
+        }),
+        enrichment: enr({ text: 'σκύλος', lemma: 'σκύλος', pos: 'noun' }),
+      },
+    ];
+    let storeMediaCalled = false;
+    let updateNotePayload: Record<string, unknown> | null = null;
+    const audioFetchImpl = vi.fn(
+      async () => new Response(new Uint8Array([1, 2, 3])),
+    ) as unknown as typeof fetch;
+    const { fetchImpl } = mockAnki({
+      version: () => 6,
+      deckNames: () => ['Duolingo::Greek'],
+      modelNames: () => ['Duolingo Word'],
+      modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
+      findNotes: () => [11],
+      notesInfo: () => [
+        {
+          noteId: 11,
+          modelName: 'Duolingo Word',
+          tags: ['duolingo', 'el'], // older build
+          fields: {
+            LemmaKey: { value: 'el:σκύλος:σκύλος', order: 0 },
+            Language: { value: 'el', order: 1 },
+            English: { value: 'old english value', order: 2 },
+            Target: { value: 'σκύλος', order: 3 },
+            TargetWithArticle: { value: 'σκύλος', order: 4 },
+            Lemma: { value: 'σκύλος', order: 5 },
+            POS: { value: 'noun', order: 6 },
+            Inflection: { value: '', order: 7 },
+            Notes: { value: '', order: 8 },
+            Audio: { value: '[sound:duolingo_existing.mp3]', order: 9 },
+          },
+        },
+      ],
+      storeMediaFile: () => {
+        storeMediaCalled = true;
+        return 'should-not-fire.mp3';
+      },
+      updateNoteFields: (params) => {
+        updateNotePayload = params;
+        return null;
+      },
+      updateNoteTags: () => null,
+      addNotes: () => {
+        throw new Error('addNotes must NOT be called on the update path');
+      },
+    });
+    await syncToAnki(notes, { deckName: 'Duolingo::Greek', fetchImpl, audioFetchImpl });
+    expect(audioFetchImpl).not.toHaveBeenCalled();
+    expect(storeMediaCalled).toBe(false);
+    expect(updateNotePayload).not.toBeNull();
+    const up = updateNotePayload as unknown as { note: { fields: Record<string, string> } };
+    expect(up.note.fields['Audio']).toBe('[sound:duolingo_existing.mp3]');
   });
 });
 
@@ -517,6 +936,7 @@ describe('syncToAnki — addNotes fallback for nulls (preflight miss)', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: (params) => {
         const query = params['query'] as string;
         if (query.includes('LemmaKey:')) {
@@ -580,6 +1000,7 @@ describe('syncToAnki — LemmaKey uniqueness across inflections', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       addNotes: (params) => {
         addNotesPayload = params;
@@ -617,6 +1038,7 @@ describe('syncToAnki — addNotes returns top-level error on all-duplicate batch
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       addNotes: () => ankiResponse(null, dupList),
       // Preflight returns [] (defensive simulation: pretend the preflight
       // missed these), then each per-null confirmation returns the existing
@@ -650,6 +1072,7 @@ describe('syncToAnki — addNotes returns top-level error on all-duplicate batch
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       addNotes: () => ankiResponse(null, dupList),
     });
@@ -667,6 +1090,7 @@ describe('syncToAnki — addNotes returns top-level error on all-duplicate batch
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       addNotes: () => ankiResponse(null, 'deck was not found'),
     });
@@ -687,6 +1111,7 @@ describe('syncToAnki — failure when no duplicate exists', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       addNotes: () => [null],
       // Preflight then per-null confirmation; both return [].
       findNotes: () => {
@@ -732,6 +1157,7 @@ describe('syncToAnki — audio fetch failure', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       // storeMediaFile must NOT be called when the audio fetch fails.
       storeMediaFile: () => {
@@ -780,6 +1206,7 @@ describe('syncToAnki — skipAudio:true', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       storeMediaFile: () => {
         throw new Error('should not be called');
@@ -814,6 +1241,7 @@ describe('syncToAnki — empty input', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       addNotes: () => {
         throw new Error('should not be called');
       },
@@ -828,6 +1256,7 @@ describe('syncToAnki — empty input', () => {
     expect(result).toEqual({
       added: 0,
       skipped: 0,
+      updated: 0,
       audioStored: 0,
       audioFailed: 0,
       failed: [],
@@ -837,6 +1266,7 @@ describe('syncToAnki — empty input', () => {
       'deckNames',
       'modelNames',
       'modelFieldNames',
+      'modelTemplates',
     ]);
   });
 });
@@ -873,6 +1303,7 @@ describe('syncToAnki — storeMediaFile failure is not swallowed', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       storeMediaFile: () => {
         // Simulate an AnkiConnect-level failure (e.g. media folder missing).
@@ -910,6 +1341,7 @@ describe('syncToAnki — addNotes length mismatch', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       addNotes: () => [1, 2],
     });
@@ -934,6 +1366,7 @@ describe('syncToAnki — empty enrichment.notes', () => {
       deckNames: () => ['Duolingo::Greek'],
       modelNames: () => ['Duolingo Word'],
       modelFieldNames: () => [...__test.NOTE_TYPE_FIELDS],
+      modelTemplates: () => currentTemplates(),
       findNotes: () => [],
       addNotes: (params) => {
         addNotesPayload = params;

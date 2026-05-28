@@ -309,6 +309,44 @@ describe('inferMorphology — coverage statistics on the 50-word fixture', () =>
   });
 });
 
+describe('inferMorphology — rule 3 exclusions for -οι / -ει / -αι', () => {
+  // Regression: rule 3 used to catch any -ι/-ί ending as high-confidence
+  // neuter singular, which mis-tagged masculine plurals (σκύλοι → "το
+  // σκύλοι"), 3sg verbs (παίζει → "το παίζει"), and είναι → "το είναι".
+  // These three suffixes must NOT match rule 3; they fall through to the
+  // LLM (rule 10 default).
+  it.each([
+    ['σκύλοι', 'masc plural of σκύλος'],
+    ['φίλοι', 'masc plural of φίλος'],
+    ['κύριοι', 'masc plural of κύριος'],
+    ['παίζει', '3sg of παίζω'],
+    ['γράφει', '3sg of γράφω'],
+    ['τρώει', '3sg of τρώω'],
+    ['είναι', '3sg/3pl of είμαι'],
+  ])('does not tag "%s" (%s) as high-confidence neuter', (text) => {
+    const result = inferMorphology(lex(text));
+    expect(result.confidence).not.toBe('high');
+    // Either falls through to rule 10 (unknown, needsEnrichment), or to
+    // another medium rule — either way, never claims neuter-singular -ι.
+    if (result.pos === 'noun' && result.gender === 'n' && result.article === 'το') {
+      // -οι/-ει/-αι should never reach the rule-3 neuter synthesis path.
+      expect(result.reason).not.toContain('-ι');
+    }
+  });
+
+  it('still tags genuine -ι/-ί singular neuter nouns at high confidence', () => {
+    // Defense against an over-broad exclusion that would drop the rule
+    // entirely. The rule must still fire for canonical -ι neuters.
+    for (const text of ['παιδί', 'σπίτι', 'αγόρι', 'ψωμί']) {
+      const result = inferMorphology(lex(text));
+      expect(result.confidence).toBe('high');
+      expect(result.pos).toBe('noun');
+      expect(result.gender).toBe('n');
+      expect(result.article).toBe('το');
+    }
+  });
+});
+
 describe('inferMorphology — edge cases', () => {
   it('returns pos=unknown on an empty string without throwing', () => {
     const result = inferMorphology(lex(''));
