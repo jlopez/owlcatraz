@@ -302,6 +302,7 @@ describe('formatPOS', () => {
     [enr({ text: 'καλός', lemma: 'καλός', pos: 'adjective' }), 'adjective'],
     [enr({ text: 'γρήγορα', lemma: 'γρήγορα', pos: 'adverb' }), 'adverb'],
     [enr({ text: 'εγώ', lemma: 'εγώ', pos: 'pronoun' }), 'pronoun'],
+    [enr({ text: 'οι', lemma: 'οι', pos: 'article' }), 'article'],
     [enr({ text: 'με συγχωρείτε', lemma: 'με συγχωρείτε', pos: 'phrase' }), 'phrase'],
     [enr({ text: 'να', lemma: 'να', pos: 'particle' }), 'particle'],
     [enr({ text: 'foo', lemma: 'foo', pos: 'other' }), 'other'],

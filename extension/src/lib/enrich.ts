@@ -29,6 +29,7 @@ export type EnrichmentPOS =
   | 'adjective'
   | 'adverb'
   | 'pronoun'
+  | 'article'
   | 'phrase'
   | 'particle'
   | 'other';
@@ -76,6 +77,7 @@ const VALID_POS: ReadonlySet<string> = new Set<EnrichmentPOS>([
   'adjective',
   'adverb',
   'pronoun',
+  'article',
   'phrase',
   'particle',
   'other',
@@ -102,7 +104,17 @@ const TOOL_INPUT_SCHEMA = {
           text: { type: 'string', description: 'exact text of the input lexeme' },
           pos: {
             type: 'string',
-            enum: ['noun', 'verb', 'adjective', 'adverb', 'pronoun', 'phrase', 'particle', 'other'],
+            enum: [
+              'noun',
+              'verb',
+              'adjective',
+              'adverb',
+              'pronoun',
+              'article',
+              'phrase',
+              'particle',
+              'other',
+            ],
           },
           gender: { type: ['string', 'null'], enum: ['m', 'f', 'n', null] },
           number: { type: ['string', 'null'], enum: ['singular', 'plural', null] },
