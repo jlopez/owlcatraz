@@ -222,14 +222,13 @@ Anthropic API key.
 
 In rough priority order:
 
-- **Update-in-place re-sync.** Today a re-sync either adds new notes or
-  skips existing ones. An `updateExisting` path using AnkiConnect's
-  `updateNoteFields` would let the enrichment algorithm evolve without
-  throwing away the user's review history (cards and scheduling state
-  live separately from fields). Pair with a "clear enrichment cache"
-  toggle for when the LLM prompt itself changes.
 - **Enrichment-algorithm bug fixes.** A handful of known issues to track
-  and address in the same pass as update-in-place.
+  and address as they surface — the build-version auto-heal lets fixes
+  ship without forcing users to delete and re-sync the deck.
+- **"Clear enrichment cache" toggle.** When the LLM prompt itself
+  changes (rather than the rendering code), bumping the build version
+  re-renders notes from the existing cache. A user-facing toggle to
+  drop the cache and force re-enrichment would close that gap.
 - **Sync progress bar.** The popup currently streams text-only progress
   lines; a visual bar against per-step totals would be a cheap UX win
   for the enrichment and AnkiConnect-write steps (which have known
