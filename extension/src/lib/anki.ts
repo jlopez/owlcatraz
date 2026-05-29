@@ -16,7 +16,10 @@ const AUDIO_FILENAME_PREFIX = 'duolingo_';
 //
 // v2: rule-3 -οι/-ει/-αι exclusions; enrichment article-on-non-noun
 // sanitization; Recognition card typing prompt = TargetWithArticle.
-const BUILD_VERSION = 2;
+// v3: English field no longer concatenates enrichment.notes — the Notes
+// field carries them on the back of the card instead, so the Recognition
+// front can't leak morpheme breakdowns or other Greek-shaped hints.
+const BUILD_VERSION = 3;
 const BUILD_TAG_PREFIX = 'owlcatraz:build:';
 const BUILD_TAG_CURRENT = `${BUILD_TAG_PREFIX}${String(BUILD_VERSION)}`;
 
@@ -310,14 +313,12 @@ function buildFields(
   // duplicate detection — both within a single batch and across syncs.
   // Sorting by LemmaKey still groups inflections of the same lemma together.
   const lemmaKey = computeLemmaKey(note);
-  const englishBase = lexeme.translations.join(' / ');
-  // The Notes field already carries enrichment.notes verbatim; we also append
-  // a hint to English so the Recognition front shows the polite/idiomatic
-  // qualification next to the bare gloss without forcing the learner to flip.
-  const english =
-    enrichment.notes !== null && enrichment.notes !== ''
-      ? `${englishBase} — ${enrichment.notes}`
-      : englishBase;
+  // English is the bare gloss only. enrichment.notes is intentionally NOT
+  // concatenated here — it lands on the back via the Notes field. The
+  // Recognition card shows English on the front, so any Greek-language hint
+  // (morpheme breakdown, root words, etc.) appended here would leak the
+  // answer the learner is being asked to type.
+  const english = lexeme.translations.join(' / ');
   const targetWithArticle =
     enrichment.article !== null ? `${enrichment.article} ${lexeme.text}` : lexeme.text;
   const fields: Record<string, string> = {
