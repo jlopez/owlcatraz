@@ -419,7 +419,7 @@ describe('syncToAnki — happy path', () => {
     expect(ap.notes[0]?.deckName).toBe('Duolingo::Greek');
     // New notes carry the current build tag so the next sync can short-circuit.
     expect(ap.notes[0]?.tags).toEqual(['duolingo', 'el', __test.BUILD_TAG_CURRENT]);
-    expect(ap.notes[0]?.fields['LemmaKey']).toBe('el:σκύλος:σκύλος');
+    expect(ap.notes[0]?.fields['LemmaKey']).toBe('el:σκύλος');
     expect(ap.notes[0]?.fields['TargetWithArticle']).toBe('ο σκύλος');
     expect(ap.notes[0]?.fields['POS']).toBe('noun (masc., sing.)');
     expect(ap.notes[0]?.fields['Audio']).toBe(sp.filename ? `[sound:${sp.filename}]` : '');
@@ -482,7 +482,9 @@ describe('syncToAnki — preflight duplicate skip', () => {
           // Build tag is current → preflight skip without fields rebuild.
           tags: ['duolingo', 'el', __test.BUILD_TAG_CURRENT],
           fields: {
-            LemmaKey: { value: 'el:b:b', order: 0 },
+            LemmaKey: { value: 'el:b', order: 0 },
+            Language: { value: 'el', order: 1 },
+            Target: { value: 'b', order: 3 },
           },
         },
       ],
@@ -509,15 +511,15 @@ describe('syncToAnki — preflight duplicate skip', () => {
     const ap = addNotesPayload as unknown as {
       notes: { fields: Record<string, string> }[];
     };
-    expect(ap.notes.map((n) => n.fields['LemmaKey'])).toEqual(['el:a:a', 'el:c:c']);
+    expect(ap.notes.map((n) => n.fields['LemmaKey'])).toEqual(['el:a', 'el:c']);
     // storeMediaFile called twice (a and c), not three times.
     const storeCount = calls.filter((c) => c.action === 'storeMediaFile').length;
     expect(storeCount).toBe(2);
   });
 
   it('correctly skips phrase keys with spaces in the preflight set', async () => {
-    // Regression: phrase lemma keys (e.g. "el:με συγχωρείτε:…") contain
-    // spaces. The preflight match is a plain Set lookup on string values
+    // Regression: phrase identity keys (e.g. "el:με συγχωρείτε") contain
+    // spaces. The preflight match is a plain Map lookup on string values
     // returned by notesInfo, so spaces don't need special handling — but
     // pin this behavior with a test so a future search-syntax refactor
     // can't silently break it.
@@ -541,10 +543,9 @@ describe('syncToAnki — preflight duplicate skip', () => {
           modelName: 'Duolingo Word',
           tags: ['duolingo', 'el', __test.BUILD_TAG_CURRENT],
           fields: {
-            LemmaKey: {
-              value: 'el:με συγχωρείτε:με συγχωρείτε',
-              order: 0,
-            },
+            LemmaKey: { value: 'el:με συγχωρείτε', order: 0 },
+            Language: { value: 'el', order: 1 },
+            Target: { value: 'με συγχωρείτε', order: 3 },
           },
         },
       ],
@@ -639,6 +640,10 @@ describe('syncToAnki — build-version auto-heal', () => {
     expect(up.note.fields['TargetWithArticle']).toBe('οι σκύλοι');
     expect(up.note.fields['Lemma']).toBe('σκύλος');
     expect(up.note.fields['POS']).toBe('noun (masc., pl.)');
+    // LemmaKey migrated from v3-and-earlier `${lang}:${lemma}:${text}` to
+    // v4 `${lang}:${text}`. The note was still found in the preflight
+    // because the lookup keys off (Language, Target), not LemmaKey.
+    expect(up.note.fields['LemmaKey']).toBe('el:σκύλοι');
 
     expect(updateTagsPayload).not.toBeNull();
     const tp = updateTagsPayload as unknown as { note: number; tags: string[] };
@@ -682,7 +687,7 @@ describe('syncToAnki — build-version auto-heal', () => {
           modelName: 'Duolingo Word',
           tags: ['duolingo', 'el'], // older build, no current tag
           fields: {
-            LemmaKey: { value: 'el:γάντι:γάντι', order: 0 },
+            LemmaKey: { value: 'el:γάντι', order: 0 },
             Language: { value: 'el', order: 1 },
             English: { value: 'glove', order: 2 },
             Target: { value: 'γάντι', order: 3 },
@@ -747,7 +752,7 @@ describe('syncToAnki — build-version auto-heal', () => {
             'custom',
           ],
           fields: {
-            LemmaKey: { value: 'el:a:a', order: 0 },
+            LemmaKey: { value: 'el:a', order: 0 },
             Language: { value: 'el', order: 1 },
             English: { value: '', order: 2 },
             Target: { value: 'a', order: 3 },
@@ -827,9 +832,9 @@ describe('syncToAnki — build-version auto-heal', () => {
       modelTemplates: () => currentTemplates(),
       findNotes: () => [1, 2, 3],
       notesInfo: () => [
-        noteInfo(1, 'el:a:a', 'a'),
-        noteInfo(2, 'el:b:b', 'b'),
-        noteInfo(3, 'el:c:c', 'c'),
+        noteInfo(1, 'el:a', 'a'),
+        noteInfo(2, 'el:b', 'b'),
+        noteInfo(3, 'el:c', 'c'),
       ],
       updateNoteFields: (params) => {
         updateCalls += 1;
@@ -850,7 +855,7 @@ describe('syncToAnki — build-version auto-heal', () => {
     // Note b failed and is recorded; a and c succeeded.
     expect(result.updated).toBe(2);
     expect(result.failed).toHaveLength(1);
-    expect(result.failed[0]?.lemmaKey).toBe('el:b:b');
+    expect(result.failed[0]?.lemmaKey).toBe('el:b');
     expect(result.failed[0]?.reason).toMatch(/update failed.*invalid fields/);
   });
 
@@ -886,7 +891,7 @@ describe('syncToAnki — build-version auto-heal', () => {
           modelName: 'Duolingo Word',
           tags: ['duolingo', 'el'], // older build
           fields: {
-            LemmaKey: { value: 'el:σκύλος:σκύλος', order: 0 },
+            LemmaKey: { value: 'el:σκύλος', order: 0 },
             Language: { value: 'el', order: 1 },
             English: { value: 'old english value', order: 2 },
             Target: { value: 'σκύλος', order: 3 },
@@ -960,17 +965,16 @@ describe('syncToAnki — addNotes fallback for nulls (preflight miss)', () => {
     expect(result.skipped).toBe(1);
     expect(result.failed).toEqual([]);
     expect(preflightCalls).toBe(1);
-    expect(confirmationQuery).toBe('deck:"Duolingo::Greek" LemmaKey:"el:b:b"');
+    expect(confirmationQuery).toBe('deck:"Duolingo::Greek" LemmaKey:"el:b"');
   });
 });
 
 describe('syncToAnki — LemmaKey uniqueness across inflections', () => {
   it('emits distinct LemmaKeys for surface forms that share a lemma', async () => {
-    // Regression: 294 fixture lexemes collapsed to 252 unique LemmaKeys when
-    // the key was just `${language}:${lemma}`, because Duolingo teaches
-    // multiple inflected forms of the same lemma (διαβάζω / διαβάζεις /
-    // διαβάζετε all share lemma διαβάζω). Anki rejected the in-batch
-    // collisions and rolled back the entire addNotes call.
+    // Anki's first-field-based dedup would collapse inflections of the same
+    // lemma (διαβάζω / διαβάζεις / διαβάζετε) into a single note if LemmaKey
+    // didn't include the surface form. Pinning behavior so a future refactor
+    // can't reintroduce a lemma-only key by accident.
     const notes: NoteData[] = [
       {
         language: 'el',
@@ -1015,7 +1019,7 @@ describe('syncToAnki — LemmaKey uniqueness across inflections', () => {
     expect(result.added).toBe(3);
     const ap = addNotesPayload as unknown as { notes: { fields: Record<string, string> }[] };
     const keys = ap.notes.map((n) => n.fields['LemmaKey']);
-    expect(keys).toEqual(['el:διαβάζω:διαβάζω', 'el:διαβάζω:διαβάζεις', 'el:διαβάζω:διαβάζετε']);
+    expect(keys).toEqual(['el:διαβάζω', 'el:διαβάζεις', 'el:διαβάζετε']);
     expect(new Set(keys).size).toBe(3);
   });
 });
@@ -1131,7 +1135,7 @@ describe('syncToAnki — failure when no duplicate exists', () => {
     expect(result.added).toBe(0);
     expect(result.skipped).toBe(0);
     expect(result.failed).toHaveLength(1);
-    expect(result.failed[0]?.lemmaKey).toBe('el:a:a');
+    expect(result.failed[0]?.lemmaKey).toBe('el:a');
     expect(result.failed[0]?.reason).toMatch(/no existing note found/);
   });
 });
