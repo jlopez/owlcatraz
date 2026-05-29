@@ -427,8 +427,11 @@ describe('syncToAnki — happy path', () => {
     expect(ap.notes[1]?.fields['Inflection']).toBe('1sg present');
     expect(ap.notes[1]?.fields['POS']).toBe('verb');
     expect(ap.notes[2]?.fields['POS']).toBe('phrase');
-    expect(ap.notes[2]?.fields['English']).toContain('excuse me');
-    expect(ap.notes[2]?.fields['English']).toContain('polite');
+    // English is the bare translation join — enrichment.notes lands in Notes
+    // only, so the Recognition front can't leak hints into the prompt.
+    expect(ap.notes[2]?.fields['English']).toBe('excuse me');
+    expect(ap.notes[2]?.fields['English']).not.toContain('polite');
+    expect(ap.notes[2]?.fields['Notes']).toBe('polite "excuse me"');
 
     expect(audioFetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -1353,7 +1356,7 @@ describe('syncToAnki — addNotes length mismatch', () => {
 });
 
 describe('syncToAnki — empty enrichment.notes', () => {
-  it('treats an empty-string notes value the same as null (no " — " suffix)', async () => {
+  it('produces a bare English gloss and an empty Notes field', async () => {
     const notes: NoteData[] = [
       {
         language: 'el',
