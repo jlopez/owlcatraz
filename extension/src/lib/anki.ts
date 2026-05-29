@@ -19,7 +19,12 @@ const AUDIO_FILENAME_PREFIX = 'duolingo_';
 // v3: English field no longer concatenates enrichment.notes — the Notes
 // field carries them on the back of the card instead, so the Recognition
 // front can't leak morpheme breakdowns or other Greek-shaped hints.
-const BUILD_VERSION = 3;
+// v4: LemmaKey reformulated as `${language}:${text}` — the LLM-derived
+// lemma is no longer part of the key. Existing notes have their LemmaKey
+// field rewritten in place via the heal path; identity lookup now keys
+// off the stable (Language, Target) fields, so LLM lemma drift no longer
+// orphans previously-synced cards.
+const BUILD_VERSION = 4;
 const BUILD_TAG_PREFIX = 'owlcatraz:build:';
 const BUILD_TAG_CURRENT = `${BUILD_TAG_PREFIX}${String(BUILD_VERSION)}`;
 
@@ -296,10 +301,19 @@ export function formatPOS(enrichment: Enrichment): string {
   }
 }
 
-// LemmaKey schema: `${lang}:${lemma}:${text}`. See buildFields for the
-// rationale on including the surface form (per-inflection cards).
+// LemmaKey schema: `${language}:${text}`. Both components come straight
+// from Duolingo and never change for a given lexeme. Stored as the note's
+// first field so Anki's first-field-based duplicate detection has a
+// stable handle. Earlier versions included enrichment.lemma here; since
+// `lemma` is LLM-derived, occasional drift (e.g. διαβάζει → lemma
+// διαβάζω today, διαβάζομαι tomorrow) silently forked the deck — every
+// re-classified inflection orphaned its old note and created a new one
+// from scratch. NOTE: identity lookup in fetchExistingNotes reads
+// (Language, Target) directly from stored fields rather than recomputing
+// this key, so LemmaKey itself can change form again in the future
+// without breaking the heal path.
 function computeLemmaKey(note: NoteData): string {
-  return `${note.language}:${note.enrichment.lemma}:${note.lexeme.text}`;
+  return `${note.language}:${note.lexeme.text}`;
 }
 
 function buildFields(
@@ -307,11 +321,6 @@ function buildFields(
   audioField: string,
 ): { lemmaKey: string; fields: Record<string, string> } {
   const { lexeme, enrichment, language } = note;
-  // Include the surface form, not just the lemma, so each Duolingo lexeme gets
-  // its own Anki card. Inflected forms (e.g. διαβάζω/διαβάζεις/διαβάζετε all
-  // share lemma διαβάζω) would otherwise collide in Anki's first-field-based
-  // duplicate detection — both within a single batch and across syncs.
-  // Sorting by LemmaKey still groups inflections of the same lemma together.
   const lemmaKey = computeLemmaKey(note);
   // English is the bare gloss only. enrichment.notes is intentionally NOT
   // concatenated here — it lands on the back via the Notes field. The
@@ -349,13 +358,17 @@ interface ExistingNote {
 }
 
 // Query Anki for every note already in our deck under our model, returning
-// the existing note metadata (id, fields, tags) keyed by LemmaKey. Lets
-// syncToAnki:
+// the existing note metadata (id, fields, tags) keyed by stable identity
+// `${Language}:${Target}`. Both fields are Duolingo-sourced and never
+// change for a given lexeme, so the map is impervious to LemmaKey schema
+// changes or LLM enrichment drift. Lets syncToAnki:
 //   1. skip notes whose build tag is current (no audio fetch, no addNotes);
 //   2. update notes whose build tag is older (changed fields rebuilt in
 //      place via updateNoteFields, preserving review history); and
 //   3. compare candidate fields against existing ones to skip no-op writes
 //      so AnkiWeb sync deltas only include actually-changed notes.
+// Notes missing either field are skipped — they predate this schema or
+// were authored by hand and can't be safely matched against a lexeme.
 async function fetchExistingNotes(
   deckName: string,
   modelName: string,
@@ -380,13 +393,15 @@ async function fetchExistingNotes(
         if (typeof value === 'string') fields[name] = value;
       }
     }
-    const lemmaKey = fields['LemmaKey'];
-    if (typeof lemmaKey !== 'string' || lemmaKey === '') continue;
+    const language = fields['Language'];
+    const target = fields['Target'];
+    if (typeof language !== 'string' || language === '') continue;
+    if (typeof target !== 'string' || target === '') continue;
     const tagsRaw = n['tags'];
     const tags: string[] = Array.isArray(tagsRaw)
       ? tagsRaw.filter((t) => typeof t === 'string')
       : [];
-    out.set(lemmaKey, { noteId, fields, tags });
+    out.set(`${language}:${target}`, { noteId, fields, tags });
   }
   return out;
 }
@@ -519,7 +534,12 @@ export async function syncToAnki(notes: NoteData[], options: SyncOptions): Promi
   const toAddInputs: { lemmaKey: string; note: NoteData }[] = [];
   for (const note of notes) {
     const lemmaKey = computeLemmaKey(note);
-    const existing = existingByKey.get(lemmaKey);
+    // Identity lookup is by (language, text) read from stored fields in
+    // fetchExistingNotes, not by lemmaKey — so the heal still finds a
+    // note even after we change LemmaKey's schema (which is exactly what
+    // v3 → v4 does).
+    const identityKey = `${note.language}:${note.lexeme.text}`;
+    const existing = existingByKey.get(identityKey);
     if (existing) {
       if (hasCurrentBuildTag(existing.tags)) {
         result.skipped += 1;

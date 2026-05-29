@@ -117,7 +117,7 @@ is enabled.
 
 ## Testing
 
-The offline 140-test suite at `tests/` covers data validation, morphology,
+The offline test suite at `tests/` covers data validation, morphology,
 enrichment, Anki write, and sync orchestration. The popup-smoke test
 exercises the `deriveViewFromStatus` state machine against happy-dom.
 
