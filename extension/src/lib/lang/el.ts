@@ -1,20 +1,5 @@
-import type { Lexeme } from '../types';
-
-export type POS = 'noun' | 'verb' | 'adjective' | 'phrase' | 'unknown';
-export type Gender = 'm' | 'f' | 'n';
-export type GrammaticalNumber = 'singular' | 'plural';
-export type Confidence = 'high' | 'medium' | 'low';
-
-export interface MorphologyResult {
-  text: string;
-  pos: POS;
-  gender: Gender | null;
-  number: GrammaticalNumber | null;
-  article: string | null;
-  confidence: Confidence;
-  reason: string;
-  needsEnrichment: boolean;
-}
+import type { Lexeme } from '../../types';
+import type { EnrichmentGender, FewShot, LanguageModule, MorphologyResult } from './types';
 
 function endsWithAny(text: string, suffixes: readonly string[]): boolean {
   for (const s of suffixes) {
@@ -185,3 +170,119 @@ export function inferMorphology(lexeme: Lexeme): MorphologyResult {
     needsEnrichment: true,
   };
 }
+
+const SYSTEM_PROMPT = `You are a Greek linguistics assistant. For each Greek lexeme provided, return precise grammatical metadata via the record_enrichments tool.
+
+Rules:
+- "text" must echo the input exactly, character for character.
+- For nouns: provide gender (m/f/n), number (singular/plural), and the nominative definite article (ο/η/το/οι/τα). For plurals, also provide the singular form as "lemma".
+- For verbs: provide 1st-person singular present indicative as "lemma". Note inflection details succinctly (e.g. "2sg present of διαβάζω").
+- For adjectives: provide masculine nominative singular as "lemma".
+- For phrases, pronouns, particles: lemma = the input text itself.
+- The morphology_hint with confidence="high" should be treated as anchoring — do not override unless the hint is clearly wrong for this input.
+- Do NOT correct the user's Greek; metadata reflects the form provided.`;
+
+// Definite article in nominative case. Tightened from "any string" to a closed
+// set so a hallucinated 'τη' (accusative) or English 'the' is rejected at the
+// validation boundary rather than poisoning the cache.
+const VALID_ARTICLES: ReadonlySet<string> = new Set(['ο', 'η', 'το', 'οι', 'τα']);
+const VALID_GENDERS: ReadonlySet<EnrichmentGender> = new Set<EnrichmentGender>(['m', 'f', 'n']);
+
+const FEW_SHOT: readonly FewShot[] = [
+  {
+    input: {
+      text: 'γεύμα',
+      translations: ['meal'],
+      morphology_hint: {
+        text: 'γεύμα',
+        pos: 'noun',
+        gender: 'n',
+        number: 'singular',
+        article: 'το',
+        confidence: 'high',
+        reason: '-μα ending → neuter',
+        needsEnrichment: false,
+      },
+    },
+    output: {
+      text: 'γεύμα',
+      pos: 'noun',
+      gender: 'n',
+      number: 'singular',
+      article: 'το',
+      lemma: 'γεύμα',
+      inflection: null,
+      notes: null,
+    },
+  },
+  {
+    input: {
+      text: 'διαβάζεις',
+      translations: ['you read'],
+      morphology_hint: {
+        text: 'διαβάζεις',
+        pos: 'unknown',
+        gender: null,
+        number: null,
+        article: null,
+        confidence: 'low',
+        reason: 'no morphology rule matched',
+        needsEnrichment: true,
+      },
+    },
+    output: {
+      text: 'διαβάζεις',
+      pos: 'verb',
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'διαβάζω',
+      inflection: '2sg present of διαβάζω',
+      notes: null,
+    },
+  },
+  {
+    input: {
+      text: 'με συγχωρείτε',
+      translations: ['excuse me'],
+      morphology_hint: {
+        text: 'με συγχωρείτε',
+        pos: 'phrase',
+        gender: null,
+        number: null,
+        article: null,
+        confidence: 'high',
+        reason: 'multi-word phrase',
+        needsEnrichment: false,
+      },
+    },
+    output: {
+      text: 'με συγχωρείτε',
+      pos: 'phrase',
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'με συγχωρείτε',
+      inflection: null,
+      notes: 'polite "excuse me / forgive me" (2pl form)',
+    },
+  },
+];
+
+export const el: LanguageModule = {
+  code: 'el',
+  displayName: 'Greek',
+  defaultDeckName: 'Duolingo::Greek',
+  inferMorphology,
+  enrichment: {
+    systemPrompt: SYSTEM_PROMPT,
+    toolDescription: 'Record grammatical metadata for the supplied Greek lexemes.',
+    lemmaDescription:
+      'dictionary form. For plurals, the singular. For inflected verbs, the 1st-person singular present. For phrases, the phrase itself.',
+    inflectionDescription:
+      "brief grammatical note like '2sg present of διαβάζω' or 'neuter plural of γλυκό'",
+    fewShot: FEW_SHOT,
+    validArticles: VALID_ARTICLES,
+    validGenders: VALID_GENDERS,
+  },
+};

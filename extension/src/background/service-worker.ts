@@ -1,6 +1,7 @@
 import { chromeStorageAdapter } from '../lib/enrich';
 import { decodeUserIdFromJwt, fetchUserProfile, readJwtCookie } from '../lib/duolingo';
 import { extractCurrentCourse, runFullSync, type SyncProgress } from '../lib/sync';
+import { resolveDeckName } from '../lib/lang/registry';
 import type { PopupMessage, StartSyncAck, StartSyncMessage, StatusMessage } from '../lib/messages';
 
 // Duolingo's API rejects POSTs whose Origin header is `chrome-extension://…`
@@ -83,9 +84,10 @@ function dispatchStartSync(msg: StartSyncMessage): StartSyncAck {
   };
   void (async () => {
     try {
+      const deckName = resolveDeckName(msg.settings.deckNames, msg.language);
       const result = await runFullSync({
         apiKey: msg.settings.apiKey,
-        deckName: msg.settings.deckName,
+        deckName,
         skipAudio: msg.settings.skipAudio,
         language: msg.language,
         cookies: chrome.cookies,

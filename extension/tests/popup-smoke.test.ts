@@ -131,7 +131,10 @@ describe('Popup smoke', () => {
     expect(root?.querySelector('#sync')).not.toBeNull();
   });
 
-  it('renders the wrong-course state when the active course is not Greek', async () => {
+  it('renders the unsupported-course state when the active course is not in the registry', async () => {
+    // In PR 1 only `el` is registered, so an active French course is treated
+    // as unsupported. PR 2 (French support) will move this assertion to the
+    // ready state and add a new unsupported test for some other code.
     globalRef.chrome = makeChromeMock({
       statusResponse: {
         type: 'status',
@@ -145,7 +148,9 @@ describe('Popup smoke', () => {
     await popupModule.renderPopup(document.getElementById('root'));
     const root = document.getElementById('root');
     expect(root?.textContent).toMatch(/fr/);
-    expect(root?.textContent).toMatch(/Switch to the Greek course/);
+    expect(root?.textContent).toMatch(/does not support yet/);
+    // The supported list should mention Greek by display name.
+    expect(root?.textContent).toMatch(/Greek/);
   });
 
   it('renders the error state when the status carries a profile-fetch error', async () => {

@@ -1,5 +1,19 @@
-import type { Lexeme } from '../types';
-import type { MorphologyResult } from './morphology';
+import type {
+  Enrichment,
+  EnrichmentGender,
+  EnrichmentInput,
+  EnrichmentNumber,
+  EnrichmentPOS,
+  LanguageModule,
+} from './lang/types';
+
+export type {
+  Enrichment,
+  EnrichmentGender,
+  EnrichmentInput,
+  EnrichmentNumber,
+  EnrichmentPOS,
+} from './lang/types';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -17,41 +31,14 @@ const MAX_ATTEMPTS_PER_ITEM = 3;
 // entries become invisible (rather than silently mis-typed) on the next run.
 // v2: validateEnrichment now strips gender/number/article on non-nouns;
 // v1 entries for adjectives leaked phantom articles (μάλλινος → "ο μάλλινος").
-const CACHE_PREFIX = 'enrich:v2:';
+// v3: cache key now includes language code so identical surface forms across
+// languages cache independently — old v2 entries are language-ambiguous and
+// must be re-enriched once.
+const CACHE_PREFIX = 'enrich:v3:';
 // A full batch of 100 enrichments easily exceeds 4096 (~50-180 output tokens
 // each); 16k leaves comfortable headroom without burning quota on aborted
 // generations. Haiku 4.5 supports up to 64k.
 const MAX_TOKENS = 16384;
-
-export type EnrichmentPOS =
-  | 'noun'
-  | 'verb'
-  | 'adjective'
-  | 'adverb'
-  | 'pronoun'
-  | 'article'
-  | 'phrase'
-  | 'particle'
-  | 'other';
-
-export type EnrichmentGender = 'm' | 'f' | 'n';
-export type EnrichmentNumber = 'singular' | 'plural';
-
-export interface EnrichmentInput {
-  lexeme: Lexeme;
-  morphology: MorphologyResult;
-}
-
-export interface Enrichment {
-  text: string;
-  pos: EnrichmentPOS;
-  gender: EnrichmentGender | null;
-  number: EnrichmentNumber | null;
-  article: string | null;
-  lemma: string;
-  inflection: string | null;
-  notes: string | null;
-}
 
 export interface Storage {
   get(keys: string[]): Promise<Record<string, unknown>>;
@@ -60,6 +47,11 @@ export interface Storage {
 
 export interface EnrichOptions {
   apiKey: string;
+  // Per-language config: enrichment system prompt, few-shot, valid article
+  // and gender sets, lemma/inflection guidance. Required so the driver
+  // never falls back to a language-neutral prompt that would silently mix
+  // languages.
+  languageModule: LanguageModule;
   model?: string;
   batchSize?: number;
   storage: Storage;
@@ -82,167 +74,64 @@ const VALID_POS: ReadonlySet<string> = new Set<EnrichmentPOS>([
   'particle',
   'other',
 ]);
-const VALID_GENDER: ReadonlySet<string> = new Set<EnrichmentGender>(['m', 'f', 'n']);
 const VALID_NUMBER: ReadonlySet<string> = new Set<EnrichmentNumber>(['singular', 'plural']);
-// Definite article in nominative case. Tightened from "any string" to a closed
-// set so a hallucinated 'τη' (accusative) or English 'the' is rejected at the
-// validation boundary rather than poisoning the cache.
-const VALID_ARTICLE: ReadonlySet<string> = new Set(['ο', 'η', 'το', 'οι', 'τα']);
 
-// JSON Schema passed to Claude as the tool's input_schema. Mirrors the
-// Enrichment type — keep them in lockstep.
-const TOOL_INPUT_SCHEMA = {
-  type: 'object',
-  required: ['enrichments'],
-  properties: {
-    enrichments: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['text', 'pos', 'lemma'],
-        properties: {
-          text: { type: 'string', description: 'exact text of the input lexeme' },
-          pos: {
-            type: 'string',
-            enum: [
-              'noun',
-              'verb',
-              'adjective',
-              'adverb',
-              'pronoun',
-              'article',
-              'phrase',
-              'particle',
-              'other',
-            ],
-          },
-          gender: { type: ['string', 'null'], enum: ['m', 'f', 'n', null] },
-          number: { type: ['string', 'null'], enum: ['singular', 'plural', null] },
-          article: {
-            type: ['string', 'null'],
-            enum: ['ο', 'η', 'το', 'οι', 'τα', null],
-            description: 'definite article in nominative — null for non-nouns',
-          },
-          lemma: {
-            type: 'string',
-            description:
-              'dictionary form. For plurals, the singular. For inflected verbs, the 1st-person singular present. For phrases, the phrase itself.',
-          },
-          inflection: {
-            type: ['string', 'null'],
-            description:
-              "brief grammatical note like '2sg present of διαβάζω' or 'neuter plural of γλυκό'",
-          },
-          notes: {
-            type: ['string', 'null'],
-            description: 'anything else useful for an Anki card, max ~60 chars',
+// JSON Schema for the tool input, parameterized on the active language's
+// allowed articles and genders. Mirrors the Enrichment type — keep them in
+// lockstep when adding fields.
+function buildToolSchema(module: LanguageModule): object {
+  const articleEnum: (string | null)[] = [...module.enrichment.validArticles, null];
+  const genderEnum: (EnrichmentGender | null)[] = [...module.enrichment.validGenders, null];
+  return {
+    type: 'object',
+    required: ['enrichments'],
+    properties: {
+      enrichments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['text', 'pos', 'lemma'],
+          properties: {
+            text: { type: 'string', description: 'exact text of the input lexeme' },
+            pos: {
+              type: 'string',
+              enum: [
+                'noun',
+                'verb',
+                'adjective',
+                'adverb',
+                'pronoun',
+                'article',
+                'phrase',
+                'particle',
+                'other',
+              ],
+            },
+            gender: { type: ['string', 'null'], enum: genderEnum },
+            number: { type: ['string', 'null'], enum: ['singular', 'plural', null] },
+            article: {
+              type: ['string', 'null'],
+              enum: articleEnum,
+              description: 'definite article in nominative — null for non-nouns',
+            },
+            lemma: {
+              type: 'string',
+              description: module.enrichment.lemmaDescription,
+            },
+            inflection: {
+              type: ['string', 'null'],
+              description: module.enrichment.inflectionDescription,
+            },
+            notes: {
+              type: ['string', 'null'],
+              description: 'anything else useful for an Anki card, max ~60 chars',
+            },
           },
         },
       },
     },
-  },
-} as const;
-
-const SYSTEM_PROMPT = `You are a Greek linguistics assistant. For each Greek lexeme provided, return precise grammatical metadata via the record_enrichments tool.
-
-Rules:
-- "text" must echo the input exactly, character for character.
-- For nouns: provide gender (m/f/n), number (singular/plural), and the nominative definite article (ο/η/το/οι/τα). For plurals, also provide the singular form as "lemma".
-- For verbs: provide 1st-person singular present indicative as "lemma". Note inflection details succinctly (e.g. "2sg present of διαβάζω").
-- For adjectives: provide masculine nominative singular as "lemma".
-- For phrases, pronouns, particles: lemma = the input text itself.
-- The morphology_hint with confidence="high" should be treated as anchoring — do not override unless the hint is clearly wrong for this input.
-- Do NOT correct the user's Greek; metadata reflects the form provided.`;
-
-interface FewShot {
-  // morphology_hint mirrors the full MorphologyResult shape used on the wire
-  // at callAnthropic — keeping examples and real inputs structurally identical
-  // helps the model learn the schema rather than getting confused by partial
-  // hints in the examples.
-  input: { text: string; translations: string[]; morphology_hint: MorphologyResult };
-  output: Enrichment;
+  };
 }
-
-const FEW_SHOT: readonly FewShot[] = [
-  {
-    input: {
-      text: 'γεύμα',
-      translations: ['meal'],
-      morphology_hint: {
-        text: 'γεύμα',
-        pos: 'noun',
-        gender: 'n',
-        number: 'singular',
-        article: 'το',
-        confidence: 'high',
-        reason: '-μα ending → neuter',
-        needsEnrichment: false,
-      },
-    },
-    output: {
-      text: 'γεύμα',
-      pos: 'noun',
-      gender: 'n',
-      number: 'singular',
-      article: 'το',
-      lemma: 'γεύμα',
-      inflection: null,
-      notes: null,
-    },
-  },
-  {
-    input: {
-      text: 'διαβάζεις',
-      translations: ['you read'],
-      morphology_hint: {
-        text: 'διαβάζεις',
-        pos: 'unknown',
-        gender: null,
-        number: null,
-        article: null,
-        confidence: 'low',
-        reason: 'no morphology rule matched',
-        needsEnrichment: true,
-      },
-    },
-    output: {
-      text: 'διαβάζεις',
-      pos: 'verb',
-      gender: null,
-      number: null,
-      article: null,
-      lemma: 'διαβάζω',
-      inflection: '2sg present of διαβάζω',
-      notes: null,
-    },
-  },
-  {
-    input: {
-      text: 'με συγχωρείτε',
-      translations: ['excuse me'],
-      morphology_hint: {
-        text: 'με συγχωρείτε',
-        pos: 'phrase',
-        gender: null,
-        number: null,
-        article: null,
-        confidence: 'high',
-        reason: 'multi-word phrase',
-        needsEnrichment: false,
-      },
-    },
-    output: {
-      text: 'με συγχωρείτε',
-      pos: 'phrase',
-      gender: null,
-      number: null,
-      article: null,
-      lemma: 'με συγχωρείτε',
-      inflection: null,
-      notes: 'polite "excuse me / forgive me" (2pl form)',
-    },
-  },
-];
 
 async function sha256Hex(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
@@ -253,8 +142,12 @@ async function sha256Hex(text: string): Promise<string> {
   return hex;
 }
 
-async function cacheKey(text: string): Promise<string> {
-  return `${CACHE_PREFIX}${await sha256Hex(text)}`;
+// Cache keys include the language code so identical surface forms in two
+// languages (e.g. "non" — French "no" vs. Greek-ASCII transliteration) cache
+// independently. Without this scoping, the second language to enrich would
+// silently inherit the first's metadata.
+async function cacheKey(language: string, text: string): Promise<string> {
+  return `${CACHE_PREFIX}${language}:${await sha256Hex(text)}`;
 }
 
 function isCacheEntry(value: unknown): value is CacheEntry {
@@ -272,8 +165,8 @@ function synthesizeFromMorphology(input: EnrichmentInput): Enrichment | null {
   const m = input.morphology;
   if (m.confidence !== 'high' || m.needsEnrichment) return null;
   // High-confidence morphology only ever yields pos ∈ {'phrase', 'noun'}.
-  // Anything else here would be a bug in morphology.ts — bail out and let the
-  // LLM resolve rather than risk synthesizing nonsense.
+  // Anything else here would be a bug in the language module — bail out and
+  // let the LLM resolve rather than risk synthesizing nonsense.
   if (m.pos !== 'noun' && m.pos !== 'phrase') return null;
   // lemma = text only holds for singular/non-inflected inputs. Phase-3 rules
   // never emit plural high-confidence today, but if one is added later the
@@ -300,7 +193,11 @@ async function readErrorBody(response: Response): Promise<string> {
   }
 }
 
-function validateEnrichment(item: unknown, inputTexts: ReadonlySet<string>): Enrichment {
+function validateEnrichment(
+  item: unknown,
+  inputTexts: ReadonlySet<string>,
+  module: LanguageModule,
+): Enrichment {
   if (typeof item !== 'object' || item === null) {
     throw new Error('enrichLexemes: enrichment entry is not an object');
   }
@@ -328,7 +225,11 @@ function validateEnrichment(item: unknown, inputTexts: ReadonlySet<string>): Enr
     );
   }
   const genderRaw = v['gender'] ?? null;
-  if (genderRaw !== null && (typeof genderRaw !== 'string' || !VALID_GENDER.has(genderRaw))) {
+  if (
+    genderRaw !== null &&
+    (typeof genderRaw !== 'string' ||
+      !module.enrichment.validGenders.has(genderRaw as EnrichmentGender))
+  ) {
     throw new Error(
       `enrichLexemes: enrichment for "${text}" has invalid gender: ${JSON.stringify(genderRaw)}`,
     );
@@ -340,7 +241,10 @@ function validateEnrichment(item: unknown, inputTexts: ReadonlySet<string>): Enr
     );
   }
   const articleRaw = v['article'] ?? null;
-  if (articleRaw !== null && (typeof articleRaw !== 'string' || !VALID_ARTICLE.has(articleRaw))) {
+  if (
+    articleRaw !== null &&
+    (typeof articleRaw !== 'string' || !module.enrichment.validArticles.has(articleRaw))
+  ) {
     throw new Error(
       `enrichLexemes: enrichment for "${text}" has invalid article: ${JSON.stringify(articleRaw)}`,
     );
@@ -374,7 +278,11 @@ function validateEnrichment(item: unknown, inputTexts: ReadonlySet<string>): Enr
   };
 }
 
-function parseEnrichmentsResponse(json: unknown, inputs: EnrichmentInput[]): Enrichment[] {
+function parseEnrichmentsResponse(
+  json: unknown,
+  inputs: EnrichmentInput[],
+  module: LanguageModule,
+): Enrichment[] {
   if (typeof json !== 'object' || json === null) {
     throw new Error('enrichLexemes: response is not an object');
   }
@@ -411,7 +319,7 @@ function parseEnrichmentsResponse(json: unknown, inputs: EnrichmentInput[]): Enr
     throw new Error('enrichLexemes: tool_use.input.enrichments is not an array');
   }
   const inputTexts = new Set(inputs.map((i) => i.lexeme.text));
-  return arr.map((item) => validateEnrichment(item, inputTexts));
+  return arr.map((item) => validateEnrichment(item, inputTexts, module));
 }
 
 async function callAnthropic(
@@ -420,6 +328,7 @@ async function callAnthropic(
 ): Promise<Enrichment[]> {
   const f = options.fetchImpl ?? fetch;
   const model = options.model ?? DEFAULT_MODEL;
+  const module = options.languageModule;
 
   const lexemesPayload = inputs.map((i) => ({
     text: i.lexeme.text,
@@ -429,22 +338,24 @@ async function callAnthropic(
 
   const userContent =
     'Examples (input followed by the tool input you would record):\n' +
-    FEW_SHOT.map(
-      (ex, n) =>
-        `Example ${String(n + 1)}:\n  Input: ${JSON.stringify(ex.input)}\n  Tool input: ${JSON.stringify(ex.output)}`,
-    ).join('\n') +
+    module.enrichment.fewShot
+      .map(
+        (ex, n) =>
+          `Example ${String(n + 1)}:\n  Input: ${JSON.stringify(ex.input)}\n  Tool input: ${JSON.stringify(ex.output)}`,
+      )
+      .join('\n') +
     '\n\nLexemes to enrich (call record_enrichments once with one entry per lexeme):\n' +
     JSON.stringify(lexemesPayload);
 
   const body = {
     model,
     max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
+    system: module.enrichment.systemPrompt,
     tools: [
       {
         name: TOOL_NAME,
-        description: 'Record grammatical metadata for the supplied Greek lexemes.',
-        input_schema: TOOL_INPUT_SCHEMA,
+        description: module.enrichment.toolDescription,
+        input_schema: buildToolSchema(module),
       },
     ],
     tool_choice: { type: 'tool', name: TOOL_NAME },
@@ -468,7 +379,7 @@ async function callAnthropic(
   }
 
   const json: unknown = await response.json();
-  return parseEnrichmentsResponse(json, inputs);
+  return parseEnrichmentsResponse(json, inputs, module);
 }
 
 interface Pending {
@@ -485,6 +396,7 @@ export async function enrichLexemes(
   if (batchSize <= 0) {
     throw new Error(`enrichLexemes: batchSize must be > 0 (got ${String(batchSize)})`);
   }
+  const langCode = options.languageModule.code;
 
   const passThrough = new Map<number, Enrichment>();
   const remainders: { idx: number; input: EnrichmentInput }[] = [];
@@ -495,7 +407,9 @@ export async function enrichLexemes(
   }
 
   // Single batched chrome.storage.local.get for every cache key we might need.
-  const remainderKeys = await Promise.all(remainders.map((r) => cacheKey(r.input.lexeme.text)));
+  const remainderKeys = await Promise.all(
+    remainders.map((r) => cacheKey(langCode, r.input.lexeme.text)),
+  );
   const stored = remainders.length === 0 ? {} : await options.storage.get(remainderKeys);
 
   const cached = new Map<number, Enrichment>();
