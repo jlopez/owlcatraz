@@ -131,7 +131,30 @@ describe('Popup smoke', () => {
     expect(root?.querySelector('#sync')).not.toBeNull();
   });
 
-  it('renders the wrong-course state when the active course is not Greek', async () => {
+  it('renders the no-course-detected state when courseLanguage is null without an error', async () => {
+    // Distinct from unsupported-course: profile fetched OK but the
+    // currentCourse field came back without a learningLanguage. Different
+    // remediation (wait/retry vs. switch courses).
+    globalRef.chrome = makeChromeMock({
+      statusResponse: {
+        type: 'status',
+        loggedIn: true,
+        userId: '42',
+        courseLanguage: null,
+        error: null,
+      },
+    });
+    const popupModule = await import('../src/popup/Popup');
+    await popupModule.renderPopup(document.getElementById('root'));
+    const root = document.getElementById('root');
+    expect(root?.textContent).toMatch(/couldn't detect an active Duolingo course/i);
+    expect(root?.querySelector('#try-again')).not.toBeNull();
+  });
+
+  it('renders the unsupported-course state when the active course is not in the registry', async () => {
+    // In PR 1 only `el` is registered, so an active French course is treated
+    // as unsupported. PR 2 (French support) will move this assertion to the
+    // ready state and add a new unsupported test for some other code.
     globalRef.chrome = makeChromeMock({
       statusResponse: {
         type: 'status',
@@ -145,7 +168,9 @@ describe('Popup smoke', () => {
     await popupModule.renderPopup(document.getElementById('root'));
     const root = document.getElementById('root');
     expect(root?.textContent).toMatch(/fr/);
-    expect(root?.textContent).toMatch(/Switch to the Greek course/);
+    expect(root?.textContent).toMatch(/does not support yet/);
+    // The supported list should mention Greek by display name.
+    expect(root?.textContent).toMatch(/Greek/);
   });
 
   it('renders the error state when the status carries a profile-fetch error', async () => {

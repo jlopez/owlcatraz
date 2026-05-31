@@ -8,7 +8,8 @@ import {
   type EnrichmentInput,
   type Storage,
 } from '../src/lib/enrich';
-import type { MorphologyResult } from '../src/lib/morphology';
+import type { MorphologyResult } from '../src/lib/lang/types';
+import { el } from '../src/lib/lang/el';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -86,6 +87,7 @@ describe('enrichLexemes — pass-through', () => {
     const storage = memoryStorage();
     const result = await enrichLexemes([passthrough('γεύμα'), passthrough('όνομα')], {
       apiKey: 'sk-test',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -132,6 +134,7 @@ describe('enrichLexemes — pass-through', () => {
     ) as unknown as typeof fetch;
     const result = await enrichLexemes([{ lexeme: lex('γεύματα'), morphology: pluralHint }], {
       apiKey: 'sk',
+      languageModule: el,
       storage: memoryStorage(),
       fetchImpl,
     });
@@ -143,7 +146,7 @@ describe('enrichLexemes — pass-through', () => {
 describe('enrichLexemes — cache hit', () => {
   it('returns the cached enrichment and never calls fetch', async () => {
     const text = 'διαβάζω';
-    const key = await __test.cacheKey(text);
+    const key = await __test.cacheKey(el.code, text);
     const enrichment: Enrichment = makeEnrichment({
       text,
       pos: 'verb',
@@ -156,6 +159,7 @@ describe('enrichLexemes — cache hit', () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
     const result = await enrichLexemes([needsLlm(text, ['I read'])], {
       apiKey: 'sk-test',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -178,6 +182,7 @@ describe('enrichLexemes — cache miss → API call', () => {
 
     const result = await enrichLexemes([needsLlm(text, ['I read'])], {
       apiKey: 'sk-test',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -214,7 +219,7 @@ describe('enrichLexemes — cache miss → API call', () => {
     expect(result).toEqual([enrichment]);
 
     // Cache populated.
-    const key = await __test.cacheKey(text);
+    const key = await __test.cacheKey(el.code, text);
     const stored = await storage.get([key]);
     expect(stored[key]).toBeDefined();
     const entry = stored[key] as { enrichment: Enrichment; cachedAt: number };
@@ -228,6 +233,7 @@ describe('enrichLexemes — cache miss → API call', () => {
     ) as unknown as typeof fetch;
     await enrichLexemes([needsLlm('γράφω')], {
       apiKey: 'sk',
+      languageModule: el,
       model: 'claude-sonnet-4-6',
       storage: memoryStorage(),
       fetchImpl,
@@ -265,6 +271,7 @@ describe('enrichLexemes — batching', () => {
     const storage = memoryStorage();
     const result = await enrichLexemes(inputs, {
       apiKey: 'sk',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -285,7 +292,7 @@ describe('enrichLexemes — batching', () => {
     expect(sizes.sort((a, b) => b - a)).toEqual([100, 50]);
 
     // All 150 must be in cache.
-    const keys = await Promise.all(inputs.map((i) => __test.cacheKey(i.lexeme.text)));
+    const keys = await Promise.all(inputs.map((i) => __test.cacheKey(el.code, i.lexeme.text)));
     const stored = await storage.get(keys);
     expect(Object.keys(stored)).toHaveLength(150);
   });
@@ -306,6 +313,7 @@ describe('enrichLexemes — batching', () => {
 
     await enrichLexemes(inputs, {
       apiKey: 'sk',
+      languageModule: el,
       batchSize: 2,
       storage: memoryStorage(),
       fetchImpl,
@@ -341,6 +349,7 @@ describe('enrichLexemes — LLM omissions', () => {
     const storage = memoryStorage();
     const result = await enrichLexemes(inputs, {
       apiKey: 'sk',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -360,7 +369,7 @@ describe('enrichLexemes — LLM omissions', () => {
     const secondParsed = JSON.parse(secondMatch?.[1] ?? '[]') as { text: string }[];
     expect(secondParsed.map((p) => p.text)).toEqual(['b']);
     // Cache populated for all three (including the recovered one).
-    const keys = await Promise.all(inputs.map((i) => __test.cacheKey(i.lexeme.text)));
+    const keys = await Promise.all(inputs.map((i) => __test.cacheKey(el.code, i.lexeme.text)));
     const stored = await storage.get(keys);
     expect(Object.keys(stored)).toHaveLength(3);
   });
@@ -373,6 +382,7 @@ describe('enrichLexemes — LLM omissions', () => {
     await expect(
       enrichLexemes([needsLlm('a')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -396,7 +406,7 @@ describe('enrichLexemes — mixed (cached + pass-through + LLM)', () => {
     for (const t of cachedTexts) {
       const e = makeEnrichment({ text: t, pos: 'verb', lemma: t, inflection: '1sg present' });
       cachedEnrichments.set(t, e);
-      const k = await __test.cacheKey(t);
+      const k = await __test.cacheKey(el.code, t);
       storageInit[k] = { enrichment: e, cachedAt: 1 };
     }
 
@@ -433,6 +443,7 @@ describe('enrichLexemes — mixed (cached + pass-through + LLM)', () => {
     const storage = memoryStorage(storageInit);
     const result = await enrichLexemes(inputs, {
       apiKey: 'sk',
+      languageModule: el,
       storage,
       fetchImpl,
     });
@@ -466,6 +477,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -479,6 +491,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -496,6 +509,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -522,6 +536,7 @@ describe('enrichLexemes — validation', () => {
     ) as unknown as typeof fetch;
     const result = await enrichLexemes([needsLlm('μάλλινος')], {
       apiKey: 'sk',
+      languageModule: el,
       storage: memoryStorage(),
       fetchImpl,
     });
@@ -552,6 +567,7 @@ describe('enrichLexemes — validation', () => {
     ) as unknown as typeof fetch;
     const result = await enrichLexemes([needsLlm('σκύλοι')], {
       apiKey: 'sk',
+      languageModule: el,
       storage: memoryStorage(),
       fetchImpl,
     });
@@ -584,6 +600,7 @@ describe('enrichLexemes — validation', () => {
     ) as unknown as typeof fetch;
     const result = await enrichLexemes([needsLlm('οι')], {
       apiKey: 'sk',
+      languageModule: el,
       storage: memoryStorage(),
       fetchImpl,
     });
@@ -606,6 +623,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -622,6 +640,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -651,6 +670,7 @@ describe('enrichLexemes — validation', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -666,6 +686,7 @@ describe('enrichLexemes — API errors', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk-bad',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -679,6 +700,7 @@ describe('enrichLexemes — API errors', () => {
     await expect(
       enrichLexemes([needsLlm('γράφω')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),
@@ -698,6 +720,7 @@ describe('enrichLexemes — text echo mismatch', () => {
     await expect(
       enrichLexemes([needsLlm('παιδί')], {
         apiKey: 'sk',
+        languageModule: el,
         storage: memoryStorage(),
         fetchImpl,
       }),

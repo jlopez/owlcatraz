@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import {
-  inferMorphology,
-  type Confidence,
-  type Gender,
-  type GrammaticalNumber,
-  type MorphologyResult,
-  type POS,
-} from '../src/lib/morphology';
+import { inferMorphology } from '../src/lib/lang/el';
+import type {
+  Confidence,
+  Gender,
+  GrammaticalNumber,
+  MorphologyResult,
+  POS,
+} from '../src/lib/lang/types';
 import { isLexeme, type Lexeme } from '../src/types';
 
 const here = dirname(fileURLToPath(import.meta.url));

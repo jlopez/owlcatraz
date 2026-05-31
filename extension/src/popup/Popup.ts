@@ -6,19 +6,26 @@ import {
   type Settings,
 } from '../lib/settings';
 import { chromeStorageAdapter } from '../lib/enrich';
+import {
+  SUPPORTED_LANGUAGES,
+  getLanguageModule,
+  isSupportedLanguage,
+  resolveDeckName,
+} from '../lib/lang/registry';
 import type { PopupMessage, StartSyncAck, StatusMessage, SWMessage } from '../lib/messages';
 import type { FullSyncResult, SyncProgress } from '../lib/sync';
-
-// Current release hardcodes Greek. Future multi-language support will pick
-// this up from the actual current course returned by the status check.
-const LANGUAGE = 'el';
 
 type View =
   | { kind: 'loading' }
   | { kind: 'not-logged-in' }
-  | { kind: 'wrong-course'; actual: string }
-  | { kind: 'needs-api-key'; userId: string }
-  | { kind: 'ready'; userId: string }
+  // Known course code we don't support yet — actionable: switch course.
+  | { kind: 'unsupported-course'; actual: string }
+  // Profile fetched OK but no course code was present in currentCourse.
+  // Distinct from `unsupported-course` because the remediation is different
+  // (wait/retry rather than switch); the user-visible copy reflects that.
+  | { kind: 'no-course-detected' }
+  | { kind: 'needs-api-key'; userId: string; language: string }
+  | { kind: 'ready'; userId: string; language: string }
   | { kind: 'syncing'; progress: SyncProgress | null }
   | { kind: 'done'; result: FullSyncResult }
   | { kind: 'error'; message: string };
@@ -37,6 +44,20 @@ function escapeHTML(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function supportedDisplayList(): string {
+  // e.g. "Greek (el)" or "Greek (el), French (fr)" — used in the
+  // unsupported-course message so the user knows what to switch to.
+  return SUPPORTED_LANGUAGES.map((code) => {
+    const mod = getLanguageModule(code);
+    return `${mod.displayName} (${mod.code})`;
+  }).join(', ');
+}
+
+function activeLanguageFromView(view: View): string | null {
+  if (view.kind === 'ready' || view.kind === 'needs-api-key') return view.language;
+  return null;
 }
 
 function renderStats(result: FullSyncResult): string {
@@ -66,6 +87,20 @@ function renderProgress(progress: SyncProgress | null): string {
   return `<div class="row">${escapeHTML(progress.message)}${escapeHTML(counter)}</div>`;
 }
 
+function renderDeckNameField(state: State): string {
+  // Bind the deck-name input to the active language. If we don't know the
+  // active language yet (loading, not-logged-in, unsupported), hide the field
+  // entirely — editing a deck for an unknown language is meaningless.
+  const language = activeLanguageFromView(state.view);
+  if (language === null) return '';
+  const value = resolveDeckName(state.settings.deckNames, language);
+  const module = getLanguageModule(language);
+  return `
+    <label for="deck-name">Anki deck name (${escapeHTML(module.displayName)})</label>
+    <input id="deck-name" type="text" value="${escapeHTML(value)}" />
+  `;
+}
+
 function renderSettingsPanel(state: State): string {
   if (!state.showSettings) {
     return `<div class="row"><button class="link" id="open-settings">Settings</button></div>`;
@@ -81,8 +116,7 @@ function renderSettingsPanel(state: State): string {
       <label for="api-key">Anthropic API key</label>
       <input id="api-key" type="password" value="${escapeHTML(state.settings.apiKey)}" placeholder="sk-ant-…" autocomplete="off" />
       ${warn}
-      <label for="deck-name">Anki deck name</label>
-      <input id="deck-name" type="text" value="${escapeHTML(state.settings.deckName)}" />
+      ${renderDeckNameField(state)}
       <label style="display:flex; align-items:center; gap:6px; margin-top:8px;">
         <input id="skip-audio" type="checkbox" ${skipChecked} />
         <span>Skip audio</span>
@@ -106,18 +140,28 @@ function renderView(state: State): string {
           <a href="https://www.duolingo.com" target="_blank" rel="noopener">duolingo.com</a>
           first, then reopen this popup.
         </div>`;
-    case 'wrong-course':
+    case 'unsupported-course':
       return `
-        <div class="row">Your active Duolingo course is <strong>${escapeHTML(view.actual)}</strong>, not <strong>${escapeHTML(LANGUAGE)}</strong>.</div>
-        <div class="muted">Switch to the Greek course on duolingo.com and reopen this popup.</div>`;
-    case 'needs-api-key':
+        <div class="row">Your active Duolingo course is <strong>${escapeHTML(view.actual)}</strong>, which this extension does not support yet.</div>
+        <div class="muted">Supported courses: ${escapeHTML(supportedDisplayList())}. Switch on duolingo.com and click Try again.</div>
+        <div class="row" style="margin-top:8px;"><button class="primary" id="try-again">Try again</button></div>`;
+    case 'no-course-detected':
       return `
-        <div class="row">Logged in as user <strong>${escapeHTML(view.userId)}</strong>.</div>
+        <div class="row">We couldn't detect an active Duolingo course on your profile.</div>
+        <div class="muted">If you just signed in, give Duolingo a moment to load your course, then click Try again.</div>
+        <div class="row" style="margin-top:8px;"><button class="primary" id="try-again">Try again</button></div>`;
+    case 'needs-api-key': {
+      const module = getLanguageModule(view.language);
+      return `
+        <div class="row">Logged in as user <strong>${escapeHTML(view.userId)}</strong>, course <strong>${escapeHTML(module.displayName)}</strong>.</div>
         <div class="row">Set your Anthropic API key in Settings below to enable syncing.</div>`;
-    case 'ready':
+    }
+    case 'ready': {
+      const module = getLanguageModule(view.language);
       return `
-        <div class="row">Logged in as user <strong>${escapeHTML(view.userId)}</strong>, course <strong>${escapeHTML(LANGUAGE)}</strong>.</div>
+        <div class="row">Logged in as user <strong>${escapeHTML(view.userId)}</strong>, course <strong>${escapeHTML(module.displayName)}</strong>.</div>
         <div class="row"><button class="primary" id="sync">Sync to Anki</button></div>`;
+    }
     case 'syncing':
       return `
         <div class="row"><strong>Syncing…</strong></div>
@@ -139,15 +183,21 @@ function render(root: HTMLElement, state: State): void {
   root.innerHTML = `${renderView(state)}${renderSettingsPanel(state)}`;
 }
 
-function deriveViewFromStatus(status: StatusMessage, settings: Settings): View {
+export function deriveViewFromStatus(status: StatusMessage, settings: Settings): View {
   if (!status.loggedIn) return { kind: 'not-logged-in' };
   if (status.error !== null) return { kind: 'error', message: status.error };
   const userId = status.userId ?? '?';
-  if (status.courseLanguage !== null && status.courseLanguage !== LANGUAGE) {
-    return { kind: 'wrong-course', actual: status.courseLanguage };
+  const courseLanguage = status.courseLanguage;
+  // Distinguish "course we don't support yet" from "couldn't read a course
+  // at all" — the user-actionable remediation differs and the copy reflects
+  // that. See the View union for the rationale.
+  if (courseLanguage === null) return { kind: 'no-course-detected' };
+  if (!isSupportedLanguage(courseLanguage)) {
+    return { kind: 'unsupported-course', actual: courseLanguage };
   }
-  if (settings.apiKey.length === 0) return { kind: 'needs-api-key', userId };
-  return { kind: 'ready', userId };
+  if (settings.apiKey.length === 0)
+    return { kind: 'needs-api-key', userId, language: courseLanguage };
+  return { kind: 'ready', userId, language: courseLanguage };
 }
 
 export async function renderPopup(target: HTMLElement | null): Promise<void> {
@@ -199,7 +249,12 @@ export async function renderPopup(target: HTMLElement | null): Promise<void> {
     const deckInput = target?.querySelector<HTMLInputElement>('#deck-name');
     if (deckInput)
       deckInput.addEventListener('input', () => {
-        state.settings.deckName = deckInput.value;
+        const language = activeLanguageFromView(state.view);
+        if (language === null) return;
+        state.settings.deckNames = {
+          ...state.settings.deckNames,
+          [language]: deckInput.value,
+        };
       });
     const skipInput = target?.querySelector<HTMLInputElement>('#skip-audio');
     if (skipInput)
@@ -248,6 +303,15 @@ export async function renderPopup(target: HTMLElement | null): Promise<void> {
   }
 
   async function startSync(): Promise<void> {
+    const language = activeLanguageFromView(state.view);
+    if (language === null) {
+      state.view = {
+        kind: 'error',
+        message: 'Cannot start sync without a known active course.',
+      };
+      rerender();
+      return;
+    }
     const validation = validateApiKey(state.settings.apiKey);
     if (!validation.ok) {
       state.view = {
@@ -264,7 +328,7 @@ export async function renderPopup(target: HTMLElement | null): Promise<void> {
       ack = await chrome.runtime.sendMessage<PopupMessage, StartSyncAck | undefined>({
         type: 'startSync',
         settings: state.settings,
-        language: LANGUAGE,
+        language,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

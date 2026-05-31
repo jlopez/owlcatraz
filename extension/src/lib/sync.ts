@@ -6,8 +6,8 @@ import {
   readJwtCookie,
   type CourseInfo,
 } from './duolingo';
-import { inferMorphology } from './morphology';
 import { enrichLexemes, type EnrichmentInput, type Storage } from './enrich';
+import { getLanguageModule, isSupportedLanguage } from './lang/registry';
 import { syncToAnki, type NoteData, type SyncResult } from './anki';
 import type { Lexeme } from '../types';
 
@@ -40,9 +40,9 @@ export interface SyncConfig {
   apiKey: string;
   deckName: string;
   skipAudio: boolean;
-  // Current release hardcodes Greek at the call site; future multi-language
-  // support will derive this from the user's currentCourse rather than the
-  // caller asserting it.
+  // Duolingo course code (e.g. 'el', 'fr'). runFullSync resolves this to a
+  // LanguageModule via the registry and refuses if the user's active course
+  // does not match — the popup is the gatekeeper for what's supported.
   language: string;
 
   cookies: typeof chrome.cookies;
@@ -65,6 +65,11 @@ function emit(config: SyncConfig, progress: SyncProgress): void {
 }
 
 export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
+  // Resolve the language module up front so an unsupported `config.language`
+  // (e.g. service worker bug, stale popup state) fails fast with a clear
+  // error before we touch the network.
+  const languageModule = getLanguageModule(config.language);
+
   emit(config, { step: 'auth', message: 'Reading Duolingo session…' });
   const jwt = await readJwtCookie(config.cookies);
   if (jwt === null) {
@@ -83,8 +88,15 @@ export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
     throw new Error('Could not read your active Duolingo course from the profile response.');
   }
   if (current.learningLanguage !== config.language) {
+    // Use display name + code for both sides when known; fall back to the
+    // raw code if the actual course isn't in the registry (e.g. user
+    // switched to something we don't support yet).
+    const configuredLabel = `${languageModule.displayName} (${config.language})`;
+    const actualLabel = isSupportedLanguage(current.learningLanguage)
+      ? `${getLanguageModule(current.learningLanguage).displayName} (${current.learningLanguage})`
+      : current.learningLanguage;
     throw new Error(
-      `Your active Duolingo course is ${current.learningLanguage}, not ${config.language}. ` +
+      `Your active Duolingo course is ${actualLabel}, not ${configuredLabel}. ` +
         `Switch courses on duolingo.com and try again.`,
     );
   }
@@ -122,7 +134,7 @@ export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
 
   const inputs: EnrichmentInput[] = lexemes.map((lexeme) => ({
     lexeme,
-    morphology: inferMorphology(lexeme),
+    morphology: languageModule.inferMorphology(lexeme),
   }));
 
   emit(config, {
@@ -132,6 +144,7 @@ export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
   });
   const enrichments = await enrichLexemes(inputs, {
     apiKey: config.apiKey,
+    languageModule,
     storage: config.storage,
     fetchImpl: config.fetchImpl,
   });
