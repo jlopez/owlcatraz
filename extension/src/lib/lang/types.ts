@@ -61,11 +61,13 @@ export interface EnrichmentConfig {
   // Tool description shown in the tool definition, e.g. "Record grammatical
   // metadata for the supplied <Language> lexemes."
   toolDescription: string;
-  // Per-language guidance baked into the schema for the `lemma` and
-  // `inflection` fields — what the model should produce for that language's
-  // dictionary form and its inflection notation.
+  // Per-language guidance baked into the schema for the `lemma`,
+  // `inflection`, and `article` fields — what the model should produce for
+  // that language's dictionary form, inflection notation, and article
+  // conventions (Greek needs "nominative"; French has no nominative).
   lemmaDescription: string;
   inflectionDescription: string;
+  articleDescription: string;
   fewShot: readonly FewShot[];
   // Articles allowed in the `article` field of an Enrichment. Used as the
   // schema enum and as a runtime validator that rejects out-of-set values.

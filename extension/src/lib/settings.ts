@@ -34,6 +34,11 @@ function parseDecksMap(raw: unknown): Record<string, string> | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    // Skip empty keys and non-string values. An empty key wouldn't match
+    // any real language code via resolveDeckName but would survive a load/
+    // save cycle as dead data; non-string values come from manual storage
+    // corruption (the writer path filters to strings already).
+    if (k.length === 0) continue;
     if (typeof v === 'string' && v.length > 0) out[k] = v;
   }
   return out;
@@ -42,18 +47,21 @@ function parseDecksMap(raw: unknown): Record<string, string> | null {
 export async function loadSettings(storage: Storage): Promise<Settings> {
   const stored = await storage.get([...STORAGE_KEYS]);
   const apiKeyRaw = stored[KEY_API_KEY];
-  const decksRaw = stored[KEY_DECKS];
   const skipAudioRaw = stored[KEY_SKIP_AUDIO];
 
-  // Prefer the new map shape. Fall back to the legacy single deck name only
-  // when the new key is absent — once a write under KEY_DECKS lands, the
-  // legacy key is no longer consulted (so a user who once customized their
-  // Greek deck and then deletes it from the new map cleanly resets to
-  // defaults instead of silently picking the legacy value back up).
+  // Presence of KEY_DECKS (even as an empty map) means the user has saved
+  // under the new shape at least once — treat that as authoritative and
+  // skip the legacy fallback. Distinguishing "absent" from "present but
+  // empty" preserves the case where a user clears every per-language
+  // override (it must NOT silently restore a long-deleted legacy value on
+  // the next load).
   let deckNames: Record<string, string> = {};
-  const parsed = parseDecksMap(decksRaw);
-  if (parsed !== null) {
-    deckNames = parsed;
+  if (KEY_DECKS in stored) {
+    const parsed = parseDecksMap(stored[KEY_DECKS]);
+    if (parsed !== null) deckNames = parsed;
+    // parsed === null means the stored value was a primitive or array
+    // (manual corruption). Fall through to empty map — defaults will fill
+    // in via resolveDeckName at consumption time.
   } else {
     const legacy = stored[KEY_LEGACY_DECK_NAME];
     if (typeof legacy === 'string' && legacy.length > 0) {

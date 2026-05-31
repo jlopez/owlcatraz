@@ -281,6 +281,7 @@ export const el: LanguageModule = {
       'dictionary form. For plurals, the singular. For inflected verbs, the 1st-person singular present. For phrases, the phrase itself.',
     inflectionDescription:
       "brief grammatical note like '2sg present of διαβάζω' or 'neuter plural of γλυκό'",
+    articleDescription: 'definite article in nominative — null for non-nouns',
     fewShot: FEW_SHOT,
     validArticles: VALID_ARTICLES,
     validGenders: VALID_GENDERS,

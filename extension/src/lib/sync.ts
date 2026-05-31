@@ -7,7 +7,7 @@ import {
   type CourseInfo,
 } from './duolingo';
 import { enrichLexemes, type EnrichmentInput, type Storage } from './enrich';
-import { getLanguageModule } from './lang/registry';
+import { getLanguageModule, isSupportedLanguage } from './lang/registry';
 import { syncToAnki, type NoteData, type SyncResult } from './anki';
 import type { Lexeme } from '../types';
 
@@ -88,8 +88,15 @@ export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
     throw new Error('Could not read your active Duolingo course from the profile response.');
   }
   if (current.learningLanguage !== config.language) {
+    // Use display name + code for both sides when known; fall back to the
+    // raw code if the actual course isn't in the registry (e.g. user
+    // switched to something we don't support yet).
+    const configuredLabel = `${languageModule.displayName} (${config.language})`;
+    const actualLabel = isSupportedLanguage(current.learningLanguage)
+      ? `${getLanguageModule(current.learningLanguage).displayName} (${current.learningLanguage})`
+      : current.learningLanguage;
     throw new Error(
-      `Your active Duolingo course is ${current.learningLanguage}, not ${config.language}. ` +
+      `Your active Duolingo course is ${actualLabel}, not ${configuredLabel}. ` +
         `Switch courses on duolingo.com and try again.`,
     );
   }

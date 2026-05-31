@@ -63,6 +63,11 @@ interface CacheEntry {
   cachedAt: number;
 }
 
+// POS taxonomy and number marking are intentionally shared across languages
+// rather than living on each LanguageModule — both Greek and French (and any
+// other planned Indo-European course) draw from the same nine POS values and
+// distinguish singular vs plural. Revisit if a future language genuinely needs
+// a different POS set or no number marking.
 const VALID_POS: ReadonlySet<string> = new Set<EnrichmentPOS>([
   'noun',
   'verb',
@@ -112,7 +117,7 @@ function buildToolSchema(module: LanguageModule): object {
             article: {
               type: ['string', 'null'],
               enum: articleEnum,
-              description: 'definite article in nominative — null for non-nouns',
+              description: module.enrichment.articleDescription,
             },
             lemma: {
               type: 'string',

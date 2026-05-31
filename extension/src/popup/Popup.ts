@@ -18,7 +18,12 @@ import type { FullSyncResult, SyncProgress } from '../lib/sync';
 type View =
   | { kind: 'loading' }
   | { kind: 'not-logged-in' }
+  // Known course code we don't support yet — actionable: switch course.
   | { kind: 'unsupported-course'; actual: string }
+  // Profile fetched OK but no course code was present in currentCourse.
+  // Distinct from `unsupported-course` because the remediation is different
+  // (wait/retry rather than switch); the user-visible copy reflects that.
+  | { kind: 'no-course-detected' }
   | { kind: 'needs-api-key'; userId: string; language: string }
   | { kind: 'ready'; userId: string; language: string }
   | { kind: 'syncing'; progress: SyncProgress | null }
@@ -138,7 +143,13 @@ function renderView(state: State): string {
     case 'unsupported-course':
       return `
         <div class="row">Your active Duolingo course is <strong>${escapeHTML(view.actual)}</strong>, which this extension does not support yet.</div>
-        <div class="muted">Supported courses: ${escapeHTML(supportedDisplayList())}. Switch on duolingo.com and reopen this popup.</div>`;
+        <div class="muted">Supported courses: ${escapeHTML(supportedDisplayList())}. Switch on duolingo.com and click Try again.</div>
+        <div class="row" style="margin-top:8px;"><button class="primary" id="try-again">Try again</button></div>`;
+    case 'no-course-detected':
+      return `
+        <div class="row">We couldn't detect an active Duolingo course on your profile.</div>
+        <div class="muted">If you just signed in, give Duolingo a moment to load your course, then click Try again.</div>
+        <div class="row" style="margin-top:8px;"><button class="primary" id="try-again">Try again</button></div>`;
     case 'needs-api-key': {
       const module = getLanguageModule(view.language);
       return `
@@ -177,14 +188,12 @@ export function deriveViewFromStatus(status: StatusMessage, settings: Settings):
   if (status.error !== null) return { kind: 'error', message: status.error };
   const userId = status.userId ?? '?';
   const courseLanguage = status.courseLanguage;
-  if (courseLanguage !== null && !isSupportedLanguage(courseLanguage)) {
+  // Distinguish "course we don't support yet" from "couldn't read a course
+  // at all" — the user-actionable remediation differs and the copy reflects
+  // that. See the View union for the rationale.
+  if (courseLanguage === null) return { kind: 'no-course-detected' };
+  if (!isSupportedLanguage(courseLanguage)) {
     return { kind: 'unsupported-course', actual: courseLanguage };
-  }
-  // courseLanguage === null means we have a logged-in user but couldn't read
-  // a current-course field. Treat as unsupported so the user gets actionable
-  // guidance rather than a stuck "ready" state.
-  if (courseLanguage === null) {
-    return { kind: 'unsupported-course', actual: '(none detected)' };
   }
   if (settings.apiKey.length === 0)
     return { kind: 'needs-api-key', userId, language: courseLanguage };
