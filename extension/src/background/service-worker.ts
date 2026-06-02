@@ -79,12 +79,24 @@ let syncInFlight = false;
 function dispatchStartSync(msg: StartSyncMessage): StartSyncAck {
   if (syncInFlight) return { accepted: false };
   syncInFlight = true;
+  // Mirror every progress event to the SW console so the pipeline stays
+  // observable when the popup is closed. Low volume — one line per step
+  // transition (fetch-lexemes ticks every 50 words), not per lexeme — matching
+  // the codebase's "one breadcrumb per meaningful event" logging style.
   const onProgress = (progress: SyncProgress): void => {
+    const counter =
+      progress.current !== undefined
+        ? progress.total !== undefined
+          ? ` (${String(progress.current)}/${String(progress.total)})`
+          : ` (${String(progress.current)})`
+        : '';
+    console.info(`owlcatraz: [${progress.step}] ${progress.message}${counter}`);
     postToPopup({ type: 'progress', progress });
   };
   void (async () => {
+    const deckName = resolveDeckName(msg.settings.deckNames, msg.language);
+    console.info(`owlcatraz: sync started — language=${msg.language}, deck="${deckName}"`);
     try {
-      const deckName = resolveDeckName(msg.settings.deckNames, msg.language);
       const result = await runFullSync({
         apiKey: msg.settings.apiKey,
         deckName,
@@ -95,9 +107,23 @@ function dispatchStartSync(msg: StartSyncMessage): StartSyncAck {
         fetchImpl: fetch.bind(globalThis),
         onProgress,
       });
+      const a = result.anki;
+      console.info(
+        `owlcatraz: sync complete — fetched=${String(result.lexemeCount)}, ` +
+          `enriched=${String(result.enrichmentCount)}, added=${String(a.added)}, ` +
+          `updated=${String(a.updated)}, skipped=${String(a.skipped)}, ` +
+          `audioStored=${String(a.audioStored)}, audioFailed=${String(a.audioFailed)}, ` +
+          `failed=${String(a.failed.length)}`,
+      );
+      // Surface the per-note failure reasons (LemmaKey + reason) so a partial
+      // failure is diagnosable from the console without re-running.
+      if (a.failed.length > 0) console.warn('owlcatraz: failed notes', a.failed);
       postToPopup({ type: 'syncResult', result });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // Log the full error (stack included) for diagnosis; the popup only
+      // receives the message string.
+      console.error('owlcatraz: sync failed —', err);
       postToPopup({ type: 'syncError', error: message });
     } finally {
       syncInFlight = false;

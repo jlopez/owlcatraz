@@ -1,11 +1,13 @@
 import type { LanguageModule } from './types';
 import { el } from './el';
+import { fr } from './fr';
 
 // Central registry of supported Duolingo course languages. Adding a new
 // language is a 3-step change: implement the LanguageModule (morphology +
 // enrichment config), register it here, and add fixtures + tests.
 export const LANGUAGE_MODULES: Readonly<Record<string, LanguageModule>> = {
   [el.code]: el,
+  [fr.code]: fr,
 };
 
 export const SUPPORTED_LANGUAGES: readonly string[] = Object.keys(LANGUAGE_MODULES);

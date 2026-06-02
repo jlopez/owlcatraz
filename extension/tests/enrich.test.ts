@@ -10,6 +10,7 @@ import {
 } from '../src/lib/enrich';
 import type { MorphologyResult } from '../src/lib/lang/types';
 import { el } from '../src/lib/lang/el';
+import { fr } from '../src/lib/lang/fr';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -391,6 +392,60 @@ describe('enrichLexemes — LLM omissions', () => {
   });
 });
 
+describe('enrichLexemes — per-batch progress', () => {
+  function echoFetch(): typeof fetch {
+    return vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(((init?.body as string) ?? '') || '{}') as {
+        messages: { content: string }[];
+      };
+      const content = body.messages[0]?.content ?? '';
+      const m = content.match(/Lexemes to enrich[^:]*:\n(\[.*\])$/s);
+      const parsed = JSON.parse(m?.[1] ?? '[]') as { text: string }[];
+      return mockToolResponse(parsed.map((p) => makeEnrichment({ text: p.text, lemma: p.text })));
+    }) as unknown as typeof fetch;
+  }
+
+  it('emits (enriched, total) before each batch plus a final tick', async () => {
+    const inputs = ['a', 'b', 'c', 'd', 'e'].map((t) => needsLlm(t));
+    const progress: Array<[number, number]> = [];
+    await enrichLexemes(inputs, {
+      apiKey: 'sk',
+      languageModule: el,
+      storage: memoryStorage(),
+      fetchImpl: echoFetch(),
+      batchSize: 2,
+      onProgress: (enriched, total) => progress.push([enriched, total]),
+    });
+    // 5 LLM-bound words / batchSize 2 = 3 batches → 3 pre-call ticks + 1 final.
+    expect(progress).toEqual([
+      [0, 5],
+      [2, 5],
+      [4, 5],
+      [5, 5],
+    ]);
+  });
+
+  it('does not call onProgress when nothing is LLM-bound (all synthesized)', async () => {
+    const inputs = [passthrough('γεύμα'), passthrough('όνομα')];
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('should not reach the API');
+    }) as unknown as typeof fetch;
+    let calls = 0;
+    const result = await enrichLexemes(inputs, {
+      apiKey: 'sk',
+      languageModule: el,
+      storage: memoryStorage(),
+      fetchImpl,
+      onProgress: () => {
+        calls += 1;
+      },
+    });
+    expect(result).toHaveLength(2);
+    expect(calls).toBe(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
 describe('enrichLexemes — mixed (cached + pass-through + LLM)', () => {
   it('sends exactly the LLM-bound subset to the API and returns all results in input order', async () => {
     // 10 inputs:
@@ -514,6 +569,57 @@ describe('enrichLexemes — validation', () => {
         fetchImpl,
       }),
     ).rejects.toThrow(/invalid article/);
+  });
+
+  it('force-nulls an out-of-enum article on a non-noun instead of throwing (the word "les")', async () => {
+    // Regression: the French definite article "les" is itself a vocabulary
+    // word. Haiku classifies it pos:"article" and echoes "les" into the
+    // article field — which is NOT in fr's indefinite-only {un, une, des}.
+    // The enum checks are gated on isNoun, so a non-noun's article/gender/
+    // number are force-nulled rather than aborting the whole sync over a value
+    // that never reaches Anki. (A NOUN with a bad article still throws — see
+    // the test above.)
+    const input: EnrichmentInput = {
+      lexeme: lex('les', ['the']),
+      morphology: {
+        text: 'les',
+        pos: 'unknown',
+        gender: null,
+        number: null,
+        article: null,
+        confidence: 'low',
+        reason: 'no morphology rule matched',
+        needsEnrichment: true,
+      },
+    };
+    const fetchImpl = vi.fn(async () =>
+      mockToolResponse([
+        {
+          text: 'les',
+          pos: 'article',
+          gender: 'm', // bogus on a non-noun → force-nulled
+          number: 'plural', // ditto
+          article: 'les', // out of fr's {un,une,des} → force-nulled, not thrown
+          lemma: 'les',
+          notes: 'plural definite article',
+        },
+      ]),
+    ) as unknown as typeof fetch;
+    const result = await enrichLexemes([input], {
+      apiKey: 'sk',
+      languageModule: fr,
+      storage: memoryStorage(),
+      fetchImpl,
+    });
+    expect(result[0]).toMatchObject({
+      text: 'les',
+      pos: 'article',
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'les',
+      notes: 'plural definite article',
+    });
   });
 
   it('strips article, gender, number on non-nouns even when LLM returns them', async () => {
@@ -645,6 +751,36 @@ describe('enrichLexemes — validation', () => {
         fetchImpl,
       }),
     ).rejects.toThrow(/no tool_use block/);
+  });
+
+  it('includes the offending tool input when enrichments is not an array (diagnostic)', async () => {
+    // Regression: when Haiku ignores the schema (here it wraps the result in an
+    // object instead of an array), the structural error must surface WHAT came
+    // back so the failure is diagnosable from the service-worker console rather
+    // than an opaque "is not an array".
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            content: [
+              {
+                type: 'tool_use',
+                name: 'record_enrichments',
+                input: { enrichments: { unexpected: 'object-instead-of-array' } },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof fetch;
+    await expect(
+      enrichLexemes([needsLlm('γράφω')], {
+        apiKey: 'sk',
+        languageModule: el,
+        storage: memoryStorage(),
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/enrichments is not an array.*object-instead-of-array/s);
   });
 
   it('throws a specific truncation error when stop_reason=max_tokens', async () => {

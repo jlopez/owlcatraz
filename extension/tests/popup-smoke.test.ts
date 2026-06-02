@@ -152,9 +152,32 @@ describe('Popup smoke', () => {
   });
 
   it('renders the unsupported-course state when the active course is not in the registry', async () => {
-    // In PR 1 only `el` is registered, so an active French course is treated
-    // as unsupported. PR 2 (French support) will move this assertion to the
-    // ready state and add a new unsupported test for some other code.
+    // `es` (Spanish) is not registered, so an active Spanish course is treated
+    // as unsupported. (`fr` used to live here in PR 1; PR 2 registered French,
+    // so it now renders the ready/needs-api-key state instead — see below.)
+    globalRef.chrome = makeChromeMock({
+      statusResponse: {
+        type: 'status',
+        loggedIn: true,
+        userId: '42',
+        courseLanguage: 'es',
+        error: null,
+      },
+    });
+    const popupModule = await import('../src/popup/Popup');
+    await popupModule.renderPopup(document.getElementById('root'));
+    const root = document.getElementById('root');
+    expect(root?.textContent).toMatch(/es/);
+    expect(root?.textContent).toMatch(/does not support yet/);
+    // The supported list should mention the registered courses by display name.
+    expect(root?.textContent).toMatch(/Greek/);
+    expect(root?.textContent).toMatch(/French/);
+  });
+
+  it('renders the needs-api-key state for a French course when no API key is stored', async () => {
+    // Regression guard for PR 2: French is registered, so an active `fr`
+    // course must reach needs-api-key (not unsupported-course) and surface the
+    // French display name.
     globalRef.chrome = makeChromeMock({
       statusResponse: {
         type: 'status',
@@ -167,10 +190,26 @@ describe('Popup smoke', () => {
     const popupModule = await import('../src/popup/Popup');
     await popupModule.renderPopup(document.getElementById('root'));
     const root = document.getElementById('root');
-    expect(root?.textContent).toMatch(/fr/);
-    expect(root?.textContent).toMatch(/does not support yet/);
-    // The supported list should mention Greek by display name.
-    expect(root?.textContent).toMatch(/Greek/);
+    expect(root?.textContent).toMatch(/Set your Anthropic API key/);
+    expect(root?.textContent).toMatch(/French/);
+  });
+
+  it('renders the ready state for a French course when an API key is stored', async () => {
+    globalRef.chrome = makeChromeMock({
+      statusResponse: {
+        type: 'status',
+        loggedIn: true,
+        userId: '42',
+        courseLanguage: 'fr',
+        error: null,
+      },
+      storage: { 'settings:apiKey': 'sk-ant-stored' },
+    });
+    const popupModule = await import('../src/popup/Popup');
+    await popupModule.renderPopup(document.getElementById('root'));
+    const root = document.getElementById('root');
+    expect(root?.querySelector('#sync')).not.toBeNull();
+    expect(root?.textContent).toMatch(/French/);
   });
 
   it('renders the error state when the status carries a profile-fetch error', async () => {

@@ -56,6 +56,12 @@ export interface EnrichOptions {
   batchSize?: number;
   storage: Storage;
   fetchImpl?: typeof fetch;
+  // Optional per-batch progress. Called once before each LLM batch is issued
+  // and once when the LLM phase finishes, with (enriched, total) where `total`
+  // is the count of LLM-bound words (synthesized + already-cached words are
+  // excluded — they cost no API call). Lets the caller surface "enriching
+  // N/total" progress; never called when there's nothing to send to the LLM.
+  onProgress?: (enriched: number, total: number) => void;
 }
 
 interface CacheEntry {
@@ -223,6 +229,19 @@ function validateEnrichment(
       `enrichLexemes: enrichment for "${text}" has invalid or missing pos: ${JSON.stringify(pos)}`,
     );
   }
+  const posTyped = pos as EnrichmentPOS;
+  // Gender/number/article are noun-only attributes. Adjectives, verbs,
+  // pronouns etc. don't carry an inherent article — when they surface in text
+  // alongside one it belongs to the modified noun. We force-null these fields
+  // for non-nouns below, so the enum checks are ALSO gated on isNoun: a word
+  // that *is itself* a function word — the French definite article "les", a
+  // pronoun, a determiner — legitimately echoes its own surface form into the
+  // article/gender field, and validating a field we're about to discard would
+  // abort the whole sync over a value that never reaches Anki or the cache.
+  // (Haiku also does this for adjectives, e.g. `pos:"adjective", article:"ο"`
+  // for μάλλινος.) For nouns the enums stay strict — a noun with a bogus
+  // article is a real error worth surfacing.
+  const isNoun = posTyped === 'noun';
   const lemma = v['lemma'];
   if (typeof lemma !== 'string') {
     throw new Error(
@@ -231,6 +250,7 @@ function validateEnrichment(
   }
   const genderRaw = v['gender'] ?? null;
   if (
+    isNoun &&
     genderRaw !== null &&
     (typeof genderRaw !== 'string' ||
       !module.enrichment.validGenders.has(genderRaw as EnrichmentGender))
@@ -240,13 +260,18 @@ function validateEnrichment(
     );
   }
   const numberRaw = v['number'] ?? null;
-  if (numberRaw !== null && (typeof numberRaw !== 'string' || !VALID_NUMBER.has(numberRaw))) {
+  if (
+    isNoun &&
+    numberRaw !== null &&
+    (typeof numberRaw !== 'string' || !VALID_NUMBER.has(numberRaw))
+  ) {
     throw new Error(
       `enrichLexemes: enrichment for "${text}" has invalid number: ${JSON.stringify(numberRaw)}`,
     );
   }
   const articleRaw = v['article'] ?? null;
   if (
+    isNoun &&
     articleRaw !== null &&
     (typeof articleRaw !== 'string' || !module.enrichment.validArticles.has(articleRaw))
   ) {
@@ -262,25 +287,34 @@ function validateEnrichment(
   if (notesRaw !== null && typeof notesRaw !== 'string') {
     throw new Error(`enrichLexemes: enrichment for "${text}" has invalid notes`);
   }
-  const posTyped = pos as EnrichmentPOS;
-  // Gender/number/article are noun-only attributes. Adjectives, verbs,
-  // pronouns etc. don't carry an inherent definite article — when they
-  // surface in text alongside an article it belongs to the modified noun.
-  // Haiku occasionally returns e.g. `pos: "adjective", article: "ο"` for
-  // μάλλινος; the schema description says "null for non-nouns" but isn't
-  // enforced. Force-null here so the wrong fields can't leak into Anki or
-  // the cache.
-  const isNoun = posTyped === 'noun';
   return {
     text,
     pos: posTyped,
     gender: isNoun ? (genderRaw as EnrichmentGender | null) : null,
     number: isNoun ? (numberRaw as EnrichmentNumber | null) : null,
-    article: isNoun ? articleRaw : null,
+    // Cast mirrors gender/number: the enum check is gated on isNoun, so TS no
+    // longer narrows articleRaw to string here — but in the isNoun branch it
+    // has been validated against validArticles.
+    article: isNoun ? (articleRaw as string | null) : null,
     lemma,
     inflection: inflectionRaw,
     notes: notesRaw,
   };
+}
+
+// Truncated JSON preview of an arbitrary value, for diagnostics in structural
+// parse errors. When Haiku ignores the tool schema (e.g. wraps enrichments in
+// an object, returns prose, or emits an empty input) the failure is opaque
+// without seeing what actually came back — but the full response can be large,
+// so cap the length. Local console only; never sent anywhere.
+function previewJson(value: unknown, max = 800): string {
+  let s: string;
+  try {
+    s = JSON.stringify(value) ?? String(value); // JSON.stringify(undefined) === undefined
+  } catch {
+    s = String(value);
+  }
+  return s.length > max ? `${s.slice(0, max)}… [truncated, ${String(s.length)} chars total]` : s;
 }
 
 function parseEnrichmentsResponse(
@@ -289,7 +323,7 @@ function parseEnrichmentsResponse(
   module: LanguageModule,
 ): Enrichment[] {
   if (typeof json !== 'object' || json === null) {
-    throw new Error('enrichLexemes: response is not an object');
+    throw new Error(`enrichLexemes: response is not an object — got ${previewJson(json)}`);
   }
   const obj = json as Record<string, unknown>;
   // Surface truncation as a clear error before attempting to parse a tool_use
@@ -302,7 +336,7 @@ function parseEnrichmentsResponse(
   }
   const content = obj['content'];
   if (!Array.isArray(content)) {
-    throw new Error('enrichLexemes: response.content is not an array');
+    throw new Error(`enrichLexemes: response.content is not an array — got ${previewJson(obj)}`);
   }
   let toolInput: unknown;
   for (const block of content) {
@@ -314,14 +348,27 @@ function parseEnrichmentsResponse(
     }
   }
   if (toolInput === undefined) {
-    throw new Error(`enrichLexemes: response contained no tool_use block for "${TOOL_NAME}"`);
+    // Include the block types so a text-only refusal ("I can't help with…") or
+    // a wrong tool name is visible rather than just "no tool_use block".
+    const blockTypes = content
+      .map((b) =>
+        typeof b === 'object' && b !== null ? (b as Record<string, unknown>)['type'] : typeof b,
+      )
+      .join(', ');
+    throw new Error(
+      `enrichLexemes: response contained no tool_use block for "${TOOL_NAME}" (blocks: [${String(blockTypes)}]) — ${previewJson(content)}`,
+    );
   }
   if (typeof toolInput !== 'object' || toolInput === null) {
-    throw new Error('enrichLexemes: tool_use.input is not an object');
+    throw new Error(
+      `enrichLexemes: tool_use.input is not an object — got ${previewJson(toolInput)}`,
+    );
   }
   const arr = (toolInput as Record<string, unknown>)['enrichments'];
   if (!Array.isArray(arr)) {
-    throw new Error('enrichLexemes: tool_use.input.enrichments is not an array');
+    throw new Error(
+      `enrichLexemes: tool_use.input.enrichments is not an array — got ${previewJson(toolInput)}`,
+    );
   }
   const inputTexts = new Set(inputs.map((i) => i.lexeme.text));
   return arr.map((item) => validateEnrichment(item, inputTexts, module));
@@ -433,8 +480,16 @@ export async function enrichLexemes(
   const fresh = new Map<number, Enrichment>();
   const attempts = new Map<number, number>();
   const queue: Pending[] = [...pending];
+  // Total LLM-bound words for progress. `fresh.size` (unique successes) is the
+  // monotonic numerator — re-queued items aren't double-counted because each
+  // idx lands in `fresh` at most once. Synthesized/cached words are excluded
+  // (they never reach the queue), so this counts only words that cost a call.
+  const totalToEnrich = pending.length;
   while (queue.length > 0) {
     const batch = queue.splice(0, batchSize);
+    // Emit before issuing the call so the log shows a heartbeat per batch
+    // ("enriching … (200/1500)") rather than only on completion.
+    options.onProgress?.(fresh.size, totalToEnrich);
     for (const p of batch) {
       attempts.set(p.idx, (attempts.get(p.idx) ?? 0) + 1);
     }
@@ -467,6 +522,8 @@ export async function enrichLexemes(
       await options.storage.set(writes);
     }
   }
+  // Final tick so the numerator reaches total once the LLM phase is done.
+  if (totalToEnrich > 0) options.onProgress?.(fresh.size, totalToEnrich);
 
   const out: Enrichment[] = [];
   for (const [i] of inputs.entries()) {
