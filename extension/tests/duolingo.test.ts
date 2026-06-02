@@ -345,4 +345,40 @@ describe('fetchLearnedLexemes', () => {
       /LexemesPage/,
     );
   });
+
+  describe('French course (multi-language path)', () => {
+    // Regression guard for PR 2: the learned-lexemes path is built from the
+    // course's learningLanguage, so a French course must hit /courses/fr/en/…
+    // rather than the Greek /courses/el/en/…. The fr fixture is a single page
+    // (nextStartIndex null) so one fetch returns all 50 lexemes.
+    const FR_COURSE: CourseInfo = {
+      userId: '1000000',
+      fromLanguage: 'en',
+      learningLanguage: 'fr',
+    };
+
+    function frFetch(): { fetchImpl: typeof fetch; calls: Array<[string, RequestInit]> } {
+      const calls: Array<[string, RequestInit]> = [];
+      const impl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        calls.push([url, init ?? {}]);
+        return new Response(readFileSync(resolve(fixturesDir, 'fr', 'page-0.json'), 'utf8'), {
+          status: 200,
+        });
+      });
+      return { fetchImpl: impl as unknown as typeof fetch, calls };
+    }
+
+    it('builds the fr course path and collects all 50 lexemes in a single fetch', async () => {
+      const { fetchImpl, calls } = frFetch();
+      const all = await fetchAllLearnedLexemes(FR_COURSE, 'tok', PROGRESSED, { fetchImpl });
+      expect(all).toHaveLength(50);
+      expect(calls).toHaveLength(1);
+      const firstCall = calls[0];
+      expect(firstCall).toBeDefined();
+      const [calledUrl] = firstCall as [string, RequestInit];
+      const url = new URL(calledUrl);
+      expect(url.pathname).toBe('/2017-06-30/users/1000000/courses/fr/en/learned-lexemes');
+    });
+  });
 });

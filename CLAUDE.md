@@ -12,12 +12,16 @@ the user's own session cookie, calls the Anthropic API with the user's own
 key for grammatical enrichment, and writes notes to a local Anki instance
 via AnkiConnect on `127.0.0.1:8765`.
 
-**Currently supports the Greek course only.** The data and sync layers are
-language-agnostic; morphology (`src/lib/morphology.ts`) and enrichment
-(`src/lib/enrich.ts`) are Greek-shaped. The popup hardcodes
-`LANGUAGE = 'el'` and refuses to sync against any other course. Don't
-remove the Greek language framing from docs — additional courses are on
-the roadmap but aren't implemented.
+**Currently supports the Greek and French courses.** The data and sync
+layers are language-agnostic. Each supported language is a self-contained
+`LanguageModule` under `src/lib/lang/` (morphology rules + enrichment
+prompt/few-shot/validators); `src/lib/lang/registry.ts` is the source of
+truth for what's supported. The popup gates on that registry — it derives
+the active course from the Duolingo profile and refuses to sync any course
+not in `LANGUAGE_MODULES`. Adding a course is a contained change: add
+`src/lib/lang/<code>.ts`, register it, add fixtures + tests (see Greek and
+French as the worked examples). More courses are on the roadmap; keep the
+docs honest about which are actually implemented.
 
 ## Hard rules — read before you touch fixtures or docs
 
@@ -29,10 +33,13 @@ for IP and PII reasons:
 If you need different/larger fixtures: extend by writing more synthesized
 entries by hand.
 
-If you change fixture size or composition, expect to update:
-- `tests/fixtures.test.ts` (asserted length, pagination metadata)
+Greek fixtures live at `fixtures/*.json`; each additional language gets its
+own subdirectory (`fixtures/fr/*.json`). If you change fixture size or
+composition, expect to update:
+- `tests/fixtures.test.ts` (asserted length, pagination metadata — per language)
 - `tests/duolingo.test.ts` (page-name map, expected pagination call count)
-- `tests/morphology.test.ts` (phrase count exact, coverage floors)
+- `tests/morphology.test.ts` (Greek phrase count exact, coverage floors)
+- `tests/lang/fr-morphology.test.ts` (French phrase count exact, coverage floors)
 
 ### Scope discipline — refuse these contributions
 
@@ -61,9 +68,12 @@ character, signature green).
 extension/src/
   background/service-worker.ts   Chrome MV3 entry; registers DNR session rule;
                                  dispatches getStatus + startSync messages
-  popup/main.ts + Popup.ts       UI; hardcodes LANGUAGE = 'el'
+  popup/main.ts + Popup.ts       UI; derives active course, gates on registry
   lib/duolingo.ts                JWT decode, cookie read, profile + lexeme fetch
-  lib/morphology.ts              Greek-specific rule-based POS/gender tagger
+  lib/lang/types.ts              LanguageModule + Morphology/Enrichment types
+  lib/lang/registry.ts           LANGUAGE_MODULES, getLanguageModule, resolveDeckName
+  lib/lang/el.ts                 Greek module: morphology + enrichment config
+  lib/lang/fr.ts                 French module: morphology + enrichment config
   lib/enrich.ts                  Anthropic API enrichment + chrome.storage cache
   lib/anki.ts                    AnkiConnect: ensureDeck, ensureNoteType, syncToAnki
   lib/sync.ts                    Orchestrates the full pipeline; emits progress

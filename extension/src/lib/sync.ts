@@ -147,6 +147,17 @@ export async function runFullSync(config: SyncConfig): Promise<FullSyncResult> {
     languageModule,
     storage: config.storage,
     fetchImpl: config.fetchImpl,
+    // Per-batch heartbeat. `total` here is the LLM-bound subset (excludes
+    // synthesized + cached words), so it can be smaller than inputs.length —
+    // the message says "via the LLM" to make that explicit.
+    onProgress: (enriched, total) => {
+      emit(config, {
+        step: 'enrich',
+        current: enriched,
+        total,
+        message: 'Enriching words via the LLM…',
+      });
+    },
   });
 
   const notes: NoteData[] = lexemes.map((lexeme, i) => {

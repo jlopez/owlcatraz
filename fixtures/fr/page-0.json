@@ -1,0 +1,432 @@
+{
+  "learnedLexemes": [
+    {
+      "text": "se garer",
+      "translations": [
+        "to park",
+        "park"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0001",
+      "isNew": true
+    },
+    {
+      "text": "marchand de journaux",
+      "translations": [
+        "newsstand",
+        "newsagent"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0002",
+      "isNew": true
+    },
+    {
+      "text": "tout le monde",
+      "translations": [
+        "everyone",
+        "everybody"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0003",
+      "isNew": false
+    },
+    {
+      "text": "il y a",
+      "translations": [
+        "there is",
+        "there are",
+        "ago"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0004",
+      "isNew": true
+    },
+    {
+      "text": "à bientôt",
+      "translations": [
+        "see you soon"
+      ],
+      "audioURL": null,
+      "isNew": true
+    },
+    {
+      "text": "information",
+      "translations": [
+        "information"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0006",
+      "isNew": true
+    },
+    {
+      "text": "télévision",
+      "translations": [
+        "television",
+        "TV"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0007",
+      "isNew": true
+    },
+    {
+      "text": "nation",
+      "translations": [
+        "nation"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0008",
+      "isNew": true
+    },
+    {
+      "text": "attention",
+      "translations": [
+        "attention",
+        "careful"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0009",
+      "isNew": false
+    },
+    {
+      "text": "connexion",
+      "translations": [
+        "connection"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0010",
+      "isNew": true
+    },
+    {
+      "text": "liberté",
+      "translations": [
+        "freedom",
+        "liberty"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0011",
+      "isNew": true
+    },
+    {
+      "text": "université",
+      "translations": [
+        "university"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0012",
+      "isNew": true
+    },
+    {
+      "text": "société",
+      "translations": [
+        "society",
+        "company"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0013",
+      "isNew": true
+    },
+    {
+      "text": "beauté",
+      "translations": [
+        "beauty"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0014",
+      "isNew": false
+    },
+    {
+      "text": "arrivée",
+      "translations": [
+        "arrival"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0015",
+      "isNew": true
+    },
+    {
+      "text": "journée",
+      "translations": [
+        "day"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0016",
+      "isNew": true
+    },
+    {
+      "text": "idée",
+      "translations": [
+        "idea"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0017",
+      "isNew": true
+    },
+    {
+      "text": "pensée",
+      "translations": [
+        "thought"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0018",
+      "isNew": true
+    },
+    {
+      "text": "gouvernement",
+      "translations": [
+        "government"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0019",
+      "isNew": true
+    },
+    {
+      "text": "mouvement",
+      "translations": [
+        "movement"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0020",
+      "isNew": true
+    },
+    {
+      "text": "changement",
+      "translations": [
+        "change"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0021",
+      "isNew": false
+    },
+    {
+      "text": "moment",
+      "translations": [
+        "moment"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0022",
+      "isNew": true
+    },
+    {
+      "text": "document",
+      "translations": [
+        "document"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0023",
+      "isNew": true
+    },
+    {
+      "text": "appartement",
+      "translations": [
+        "apartment",
+        "flat"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0024",
+      "isNew": true
+    },
+    {
+      "text": "bureau",
+      "translations": [
+        "office",
+        "desk"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0025",
+      "isNew": true
+    },
+    {
+      "text": "château",
+      "translations": [
+        "castle"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0026",
+      "isNew": true
+    },
+    {
+      "text": "cadeau",
+      "translations": [
+        "gift",
+        "present"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0027",
+      "isNew": false
+    },
+    {
+      "text": "cheveu",
+      "translations": [
+        "hair"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0028",
+      "isNew": true
+    },
+    {
+      "text": "neveu",
+      "translations": [
+        "nephew"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0029",
+      "isNew": true
+    },
+    {
+      "text": "fromage",
+      "translations": [
+        "cheese"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0030",
+      "isNew": true
+    },
+    {
+      "text": "voyage",
+      "translations": [
+        "trip",
+        "journey"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0031",
+      "isNew": true
+    },
+    {
+      "text": "message",
+      "translations": [
+        "message"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0032",
+      "isNew": false
+    },
+    {
+      "text": "image",
+      "translations": [
+        "image",
+        "picture"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0033",
+      "isNew": true
+    },
+    {
+      "text": "plage",
+      "translations": [
+        "beach"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0034",
+      "isNew": true
+    },
+    {
+      "text": "manger",
+      "translations": [
+        "to eat",
+        "eat"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0035",
+      "isNew": true
+    },
+    {
+      "text": "parler",
+      "translations": [
+        "to speak",
+        "to talk"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0036",
+      "isNew": true
+    },
+    {
+      "text": "finir",
+      "translations": [
+        "to finish"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0037",
+      "isNew": false
+    },
+    {
+      "text": "partir",
+      "translations": [
+        "to leave",
+        "to go"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0038",
+      "isNew": true
+    },
+    {
+      "text": "prendre",
+      "translations": [
+        "to take"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0039",
+      "isNew": true
+    },
+    {
+      "text": "hiver",
+      "translations": [
+        "winter"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0040",
+      "isNew": true
+    },
+    {
+      "text": "jument",
+      "translations": [
+        "mare"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0041",
+      "isNew": true
+    },
+    {
+      "text": "mer",
+      "translations": [
+        "sea"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0042",
+      "isNew": false
+    },
+    {
+      "text": "feu",
+      "translations": [
+        "fire"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0043",
+      "isNew": true
+    },
+    {
+      "text": "chien",
+      "translations": [
+        "dog"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0044",
+      "isNew": true
+    },
+    {
+      "text": "chat",
+      "translations": [
+        "cat"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0045",
+      "isNew": true
+    },
+    {
+      "text": "rouge",
+      "translations": [
+        "red"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0046",
+      "isNew": false
+    },
+    {
+      "text": "grand",
+      "translations": [
+        "big",
+        "tall"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0047",
+      "isNew": true
+    },
+    {
+      "text": "petit",
+      "translations": [
+        "small",
+        "little"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0048",
+      "isNew": true
+    },
+    {
+      "text": "bonjour",
+      "translations": [
+        "hello",
+        "good morning"
+      ],
+      "audioURL": "https://d1vq87e9lcf771.cloudfront.net/beafr/synth-fr-0049",
+      "isNew": true
+    },
+    {
+      "text": "merci",
+      "translations": [
+        "thank you",
+        "thanks"
+      ],
+      "audioURL": null,
+      "isNew": false
+    }
+  ],
+  "pagination": {
+    "totalLexemes": 50,
+    "requestedPageSize": 50,
+    "pageSize": 50,
+    "previousStartIndex": null,
+    "nextStartIndex": null
+  }
+}

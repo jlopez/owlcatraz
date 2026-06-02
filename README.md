@@ -14,8 +14,8 @@ local [Anki](https://apps.ankiweb.net/) deck via the
 flow runs in your browser: Duolingo fetch, grammatical enrichment (via the
 Anthropic API using your own key), and the AnkiConnect write. The data
 and sync layers are language-agnostic; the morphology and enrichment
-layers are course-specific, and the first release supports the **Greek
-course** only. Additional courses are on the roadmap.
+layers are course-specific, and the extension currently supports the
+**Greek** and **French** courses. Additional courses are on the roadmap.
 
 ## What it does not do
 
@@ -161,8 +161,9 @@ users don't need any of it.
 
 - [`extension/`](./extension/) — the Vite + TypeScript MV3 extension.
 - [`fixtures/`](./fixtures/) — synthesized lexeme pages and a minimal
-  profile (~50 basic Greek words drawn from general public-domain
-  vocabulary) used to drive the 140-test offline suite.
+  profile (~50 basic Greek words at the root, plus ~50 French words under
+  [`fixtures/fr/`](./fixtures/fr/), all drawn from general public-domain
+  vocabulary) used to drive the 221-test offline suite.
 - [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — typecheck,
   lint, format-check, test, and build on every PR and on push to `main`.
 
@@ -181,12 +182,13 @@ users don't need any of it.
 
 ### End-to-end smoke test
 
-The 140-test offline suite (`pnpm test`) covers the data, morphology,
+The 221-test offline suite (`pnpm test`) covers the data, morphology,
 enrichment, sync orchestration, and popup-render layers. The live
 Duolingo API and AnkiConnect interactions can only be exercised against
-a real Chrome profile and a running Anki + AnkiConnect. The current
-release only supports the Greek course, so the smoke test below assumes
-Greek is your active Duolingo course. Smoke-test steps:
+a real Chrome profile and a running Anki + AnkiConnect. The smoke test
+below assumes **Greek** is your active Duolingo course; a **French**
+course works identically — the popup shows course `fr` and the default
+deck is `Duolingo::French`. Smoke-test steps:
 
 1. `cd extension && pnpm build`.
 2. Open `chrome://extensions` in a Chrome window where you are signed in
@@ -241,7 +243,10 @@ In rough priority order:
   DNR session rule, the AnkiConnect rollback-on-duplicate response
   shape, and the LLM-omission re-queue logic. Each is a likely
   candidate for silent breakage and worth a targeted boundary test.
-- **Generalize beyond Greek.** Morphology and the LLM prompts are
-  Greek-shaped; adding Spanish or French would surface where the
-  Greek-specific assumptions actually live. Largest scope; defer until
-  the deck is stable for daily use.
+- **More courses.** Greek and French are implemented as self-contained
+  `LanguageModule`s under `extension/src/lib/lang/`; adding another
+  course (Spanish, German, …) means a new module + fixtures + tests, with
+  no changes to the data or sync layers. Each language picks the article
+  convention that best teaches its gender — Greek uses the definite
+  article, French the indefinite (`une eau`, not the elided `l'eau`, so
+  gender stays visible before a vowel).
