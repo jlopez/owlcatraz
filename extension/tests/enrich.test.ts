@@ -722,6 +722,42 @@ describe('enrichLexemes — validation', () => {
     });
   });
 
+  it('accepts pos="preposition" for Greek prepositions like στον/σε/από', async () => {
+    // Regression (issue #7): the LLM legitimately classifies Greek function
+    // words such as στον/στην/σε/από as `preposition`. Before adding it to the
+    // taxonomy, a single such word threw in validateEnrichment and aborted the
+    // whole batch — and thus the sync. Noun-only fields are still stripped.
+    const fetchImpl = vi.fn(async () =>
+      mockToolResponse([
+        {
+          text: 'στον',
+          pos: 'preposition',
+          gender: 'm',
+          number: 'singular',
+          article: 'ο',
+          lemma: 'στον',
+          notes: 'σε + τον — "to the" (masc. acc. sing.)',
+        },
+      ]),
+    ) as unknown as typeof fetch;
+    const result = await enrichLexemes([needsLlm('στον')], {
+      apiKey: 'sk',
+      languageModule: el,
+      storage: memoryStorage(),
+      fetchImpl,
+    });
+    expect(result[0]).toMatchObject({
+      text: 'στον',
+      pos: 'preposition',
+      // Stripped: gender/number/article are noun-only attributes.
+      gender: null,
+      number: null,
+      article: null,
+      lemma: 'στον',
+      notes: 'σε + τον — "to the" (masc. acc. sing.)',
+    });
+  });
+
   it('accepts null article (for non-nouns)', async () => {
     const fetchImpl = vi.fn(async () =>
       mockToolResponse([{ text: 'γράφω', pos: 'verb', article: null, lemma: 'γράφω' }]),

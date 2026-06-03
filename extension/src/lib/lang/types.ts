@@ -23,6 +23,7 @@ export type EnrichmentPOS =
   | 'adverb'
   | 'pronoun'
   | 'article'
+  | 'preposition'
   | 'phrase'
   | 'particle'
   | 'other';
