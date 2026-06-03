@@ -13,7 +13,7 @@ import {
   resolveDeckName,
 } from '../lib/lang/registry';
 import type { PopupMessage, StartSyncAck, StatusMessage, SWMessage } from '../lib/messages';
-import type { FullSyncResult, SyncProgress } from '../lib/sync';
+import type { FullSyncResult, SyncProgress, SyncStep } from '../lib/sync';
 
 type View =
   | { kind: 'loading' }
@@ -76,15 +76,51 @@ function renderStats(result: FullSyncResult): string {
   `;
 }
 
+// The pipeline runs five ordered steps; map each onto a slice of the overall
+// bar so progress always moves forward across step transitions. Widths are
+// weighted by how long each step typically takes — enrichment (LLM round-trips)
+// dominates, so it owns the largest slice. The slices sum to 1.
+const STEP_RANGES: Record<SyncStep, [number, number]> = {
+  auth: [0, 0.04],
+  profile: [0.04, 0.08],
+  'fetch-lexemes': [0.08, 0.3],
+  enrich: [0.3, 0.9],
+  'sync-anki': [0.9, 1],
+};
+
+// Resolve a progress event to an overall completion fraction in [0, 1], or
+// null when the current step can't report a determinate ratio (e.g. fetching
+// lexemes with an as-yet-unknown total, or a step that only announces its
+// start). null renders as an indeterminate (animated) bar so the user still
+// sees activity.
+export function computeProgressFraction(progress: SyncProgress): number | null {
+  const [start, end] = STEP_RANGES[progress.step];
+  if (progress.current !== undefined && progress.total !== undefined && progress.total > 0) {
+    const within = Math.min(1, Math.max(0, progress.current / progress.total));
+    return start + (end - start) * within;
+  }
+  return null;
+}
+
+function renderProgressBar(fraction: number | null): string {
+  if (fraction === null) {
+    return `<div class="progress indeterminate" role="progressbar" aria-busy="true"><div class="progress-fill"></div></div>`;
+  }
+  const pct = Math.round(fraction * 100);
+  return `<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${String(pct)}"><div class="progress-fill" style="width:${String(pct)}%;"></div></div>`;
+}
+
 function renderProgress(progress: SyncProgress | null): string {
-  if (progress === null) return '<div class="muted">Starting…</div>';
+  if (progress === null) {
+    return `${renderProgressBar(null)}<div class="muted">Starting…</div>`;
+  }
   const counter =
     progress.current !== undefined && progress.total !== undefined
       ? ` (${String(progress.current)} / ${String(progress.total)})`
       : progress.current !== undefined
         ? ` (${String(progress.current)})`
         : '';
-  return `<div class="row">${escapeHTML(progress.message)}${escapeHTML(counter)}</div>`;
+  return `${renderProgressBar(computeProgressFraction(progress))}<div class="row">${escapeHTML(progress.message)}${escapeHTML(counter)}</div>`;
 }
 
 function renderDeckNameField(state: State): string {

@@ -67,6 +67,38 @@ function makeChromeMock(opts: {
 
 const globalRef = globalThis as unknown as { chrome?: typeof chrome };
 
+describe('computeProgressFraction', () => {
+  it('interpolates a determinate event within its step slice', async () => {
+    const { computeProgressFraction } = await import('../src/popup/Popup');
+    // enrich spans [0.3, 0.9]; 25/100 within-step → 0.3 + 0.6*0.25 = 0.45.
+    expect(
+      computeProgressFraction({ step: 'enrich', current: 25, total: 100, message: '' }),
+    ).toBeCloseTo(0.45);
+    // sync-anki spans [0.9, 1]; a completed ratio lands at the top of the bar.
+    expect(
+      computeProgressFraction({ step: 'sync-anki', current: 10, total: 10, message: '' }),
+    ).toBeCloseTo(1);
+  });
+
+  it('clamps an out-of-range ratio into [start, end]', async () => {
+    const { computeProgressFraction } = await import('../src/popup/Popup');
+    expect(
+      computeProgressFraction({ step: 'enrich', current: 200, total: 100, message: '' }),
+    ).toBeCloseTo(0.9);
+  });
+
+  it('returns null (indeterminate) when no determinate ratio is available', async () => {
+    const { computeProgressFraction } = await import('../src/popup/Popup');
+    // Streaming fetch with unknown total.
+    expect(computeProgressFraction({ step: 'fetch-lexemes', current: 50, message: '' })).toBeNull();
+    // A step that only announces its start (no counts), and a zero total.
+    expect(computeProgressFraction({ step: 'auth', message: '' })).toBeNull();
+    expect(
+      computeProgressFraction({ step: 'enrich', current: 0, total: 0, message: '' }),
+    ).toBeNull();
+  });
+});
+
 describe('Popup smoke', () => {
   let originalChrome: typeof chrome | undefined;
 
@@ -227,6 +259,40 @@ describe('Popup smoke', () => {
     const root = document.getElementById('root');
     expect(root?.textContent).toMatch(/HTTP 502/);
     expect(root?.querySelector('#try-again')).not.toBeNull();
+  });
+
+  it('renders a progress bar while syncing and advances it on progress events', async () => {
+    globalRef.chrome = makeChromeMock({
+      statusResponse: {
+        type: 'status',
+        loggedIn: true,
+        userId: '42',
+        courseLanguage: 'el',
+        error: null,
+      },
+      storage: { 'settings:apiKey': 'sk-ant-stored' },
+    });
+    const c = globalRef.chrome as unknown as { _messageHandlers: MessageHandler[] };
+    const popupModule = await import('../src/popup/Popup');
+    await popupModule.renderPopup(document.getElementById('root'));
+    const root = document.getElementById('root');
+
+    // Kick off a sync; the view transitions to 'syncing' and renders a bar.
+    root?.querySelector<HTMLButtonElement>('#sync')?.click();
+    await Promise.resolve();
+    expect(root?.querySelector('.progress')).not.toBeNull();
+
+    // A determinate enrich event (50%) puts the fill mid-track. enrich spans
+    // [0.3, 0.9], so 50/100 within-step → 0.6 overall → 60%.
+    c._messageHandlers.forEach((h) =>
+      h({
+        type: 'progress',
+        progress: { step: 'enrich', current: 50, total: 100, message: 'Enriching…' },
+      }),
+    );
+    const fill = root?.querySelector<HTMLElement>('.progress-fill');
+    expect(fill?.style.width).toBe('60%');
+    expect(root?.querySelector('.progress')?.getAttribute('aria-valuenow')).toBe('60');
   });
 
   it('renders an error state when sendMessage(getStatus) rejects', async () => {
