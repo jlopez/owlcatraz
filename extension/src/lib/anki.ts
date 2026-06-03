@@ -288,6 +288,7 @@ export function formatPOS(enrichment: Enrichment): string {
     case 'phrase':
     case 'pronoun':
     case 'article':
+    case 'preposition':
     case 'particle':
     case 'adverb':
     case 'other':

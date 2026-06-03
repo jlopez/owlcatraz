@@ -34,7 +34,10 @@ const MAX_ATTEMPTS_PER_ITEM = 3;
 // v3: cache key now includes language code so identical surface forms across
 // languages cache independently — old v2 entries are language-ambiguous and
 // must be re-enriched once.
-const CACHE_PREFIX = 'enrich:v3:';
+// v4: 'preposition' added to the pos taxonomy. Greek function words like στον/
+// στην/σε/από previously aborted the batch (no such pos) or — once the LLM
+// retried — landed as a fallback pos; re-enrich so they get the correct value.
+const CACHE_PREFIX = 'enrich:v4:';
 // A full batch of 100 enrichments easily exceeds 4096 (~50-180 output tokens
 // each); 16k leaves comfortable headroom without burning quota on aborted
 // generations. Haiku 4.5 supports up to 64k.
@@ -81,6 +84,7 @@ const VALID_POS: ReadonlySet<string> = new Set<EnrichmentPOS>([
   'adverb',
   'pronoun',
   'article',
+  'preposition',
   'phrase',
   'particle',
   'other',
@@ -113,6 +117,7 @@ function buildToolSchema(module: LanguageModule): object {
                 'adverb',
                 'pronoun',
                 'article',
+                'preposition',
                 'phrase',
                 'particle',
                 'other',
