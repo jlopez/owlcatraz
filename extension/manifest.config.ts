@@ -3,7 +3,14 @@ import { defineManifest } from '@crxjs/vite-plugin';
 export default defineManifest({
   manifest_version: 3,
   name: 'Owlcatraz',
-  version: '0.1.0',
+  // Version is injected at build time from `derive-version` (see
+  // .github/workflows/ci.yml) and never stored in-tree. `version` must be a
+  // dotted-integer string, so it gets the clean semver; `version_name` is
+  // free-form and display-only — CI stamps releases with the plain semver and
+  // preview builds with the richer `git describe` identity (commits-ahead +
+  // sha). A local `pnpm build` with no env falls back to a dev sentinel.
+  version: process.env.VERSION ?? '0.0.0',
+  version_name: process.env.VERSION_NAME ?? 'dev',
   description:
     'Export your Duolingo vocabulary to an Anki deck for personal spaced-repetition study.',
   action: {
