@@ -1,7 +1,11 @@
 # Owlcatraz
 
 [![CI](https://github.com/jlopez/owlcatraz/actions/workflows/ci.yml/badge.svg)](https://github.com/jlopez/owlcatraz/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/jlopez/owlcatraz?sort=semver)](https://github.com/jlopez/owlcatraz/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org)
+[![Code style: Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
 **Owlcatraz — export your Duolingo vocabulary to an Anki deck.**
 
@@ -43,8 +47,8 @@ who wants the same. The two services are complementary, not competing.
 
 ## Installation and usage
 
-The extension is being prepared for the Chrome Web Store. Until it ships
-there, you can load it from source:
+**Chrome Web Store: coming soon.** The extension isn't on the store yet —
+a listing is being prepared. Until it ships there, load it from source:
 
 1. Clone the repo: `git clone https://github.com/jlopez/owlcatraz.git`
 2. Build it:
@@ -68,6 +72,16 @@ there, you can load it from source:
 
 Re-running **Sync to Anki** is safe — duplicate notes are detected via a
 preflight pass and skipped without re-fetching audio.
+
+> **When the Web Store release lands:** the published build will have a
+> different extension ID than this load-from-source build, and Chrome scopes
+> `chrome.storage.local` per extension ID. So your settings and the
+> grammatical-enrichment cache (the API key and the per-word LLM results) will
+> **not** carry over automatically when you switch to the Store version —
+> you'll re-enter your Anthropic API key once, and the enrichment cache
+> rebuilds itself on the next sync (re-calling the Anthropic API for words it
+> had previously cached). The Anki deck itself is unaffected; it lives in Anki,
+> not in the extension.
 
 ## Privacy
 
