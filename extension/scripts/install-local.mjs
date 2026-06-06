@@ -7,15 +7,18 @@
 import { cpSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { EXT_ROOT, STABLE_DIR, fail, handOff, ok, resetStableDir, run } from './install-common.mjs';
+import { EXT_ROOT, fail, freshTmp, handOff, ok, publishStable, run } from './install-common.mjs';
 
 run('pnpm', ['build'], { cwd: EXT_ROOT });
 
 const dist = join(EXT_ROOT, 'dist');
 if (!existsSync(dist)) fail('Build finished but dist/ is missing — check the build output above.');
 
-resetStableDir();
-cpSync(dist, STABLE_DIR, { recursive: true });
-ok('Copied dist/ → stable load directory');
+// Stage a copy of dist (leaving the build output in place), then atomically
+// swap it into the load dir.
+const staged = freshTmp('local');
+cpSync(dist, staged, { recursive: true });
+publishStable(staged);
+ok('Built and staged the local extension');
 
 handOff({ sourceLabel: 'Local build' });

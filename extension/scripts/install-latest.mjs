@@ -5,15 +5,17 @@
 // hardcode. The release asset is the extension zip directly (not double-wrapped
 // the way Actions artifacts are), so it's a single unzip into the stable dir.
 
+import { rmSync } from 'node:fs';
+import { basename, join } from 'node:path';
+
 import {
-  STABLE_DIR,
   ensureGh,
   fail,
   findZip,
   freshTmp,
   handOff,
   ok,
-  resetStableDir,
+  publishStable,
   run,
   unzipInto,
 } from './install-common.mjs';
@@ -30,9 +32,13 @@ try {
 
 const zip = findZip(tmp);
 if (!zip) fail('Release downloaded but no owlcatraz-*.zip was inside it.');
-ok(`Downloaded ${zip.split('/').pop()}`);
+ok(`Downloaded ${basename(zip)}`);
 
-resetStableDir();
-unzipInto(zip, STABLE_DIR);
+// Unpack into a staging dir, then atomically swap into the load dir, so a bad
+// unzip can't wipe a working install.
+const staged = join(tmp, 'staged');
+unzipInto(zip, staged);
+publishStable(staged);
+rmSync(tmp, { recursive: true, force: true });
 
 handOff({ sourceLabel: 'Latest release' });

@@ -6,8 +6,10 @@
 // stores the artifact as a zip whose single entry is our owlcatraz-<id>.zip, so
 // `gh run download` yields a folder containing the real zip — hence findZip().
 
+import { rmSync } from 'node:fs';
+import { basename, join } from 'node:path';
+
 import {
-  STABLE_DIR,
   capture,
   ensureGh,
   fail,
@@ -16,7 +18,7 @@ import {
   handOff,
   info,
   ok,
-  resetStableDir,
+  publishStable,
   run,
   sleep,
   unzipInto,
@@ -99,9 +101,13 @@ try {
 
 const zip = findZip(tmp);
 if (!zip) fail('Downloaded the run artifacts but found no owlcatraz-*.zip inside.');
-ok(`Downloaded ${zip.split('/').pop()}`);
+ok(`Downloaded ${basename(zip)}`);
 
-resetStableDir();
-unzipInto(zip, STABLE_DIR);
+// Unpack into a staging dir, then atomically swap into the load dir, so a bad
+// unzip can't wipe a working install.
+const staged = join(tmp, 'staged');
+unzipInto(zip, staged);
+publishStable(staged);
+rmSync(tmp, { recursive: true, force: true });
 
 handOff({ sourceLabel: `PR #${pr.number} build` });

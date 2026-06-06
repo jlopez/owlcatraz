@@ -13,7 +13,7 @@
 // and copying to the clipboard.
 
 import { execFileSync, execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,12 +87,6 @@ export function ensureGh() {
 
 // ── filesystem ──────────────────────────────────────────────────────────────
 
-/** Empty (or create) the stable load directory so we populate it cleanly. */
-export function resetStableDir() {
-  rmSync(STABLE_DIR, { recursive: true, force: true });
-  mkdirSync(STABLE_DIR, { recursive: true });
-}
-
 /** Make a fresh temp working dir under OWL_DIR (no Date/random needed). */
 export function freshTmp(label) {
   const dir = join(OWL_DIR, `.tmp-${label}`);
@@ -101,17 +95,40 @@ export function freshTmp(label) {
   return dir;
 }
 
-/** Unzip `zipPath` into `dest` (must already exist). Requires the `unzip` CLI. */
+/** Unzip `zipPath` into `dest` (created if absent). Requires the `unzip` CLI. */
 export function unzipInto(zipPath, dest) {
+  mkdirSync(dest, { recursive: true });
   execFileSync('unzip', ['-q', '-o', zipPath, '-d', dest], { stdio: 'inherit' });
 }
 
-/** First *.zip found anywhere under `root` (depth-first), or null. */
-export function findZip(root) {
+/** First file matching `<prefix>*.zip` anywhere under `root` (depth-first), or
+ *  null. Scoped to the owlcatraz artifact name so a stray or sidecar zip in a
+ *  download tree can't be picked up by mistake. */
+export function findZip(root, prefix = 'owlcatraz-') {
   const hit = readdirSync(root, { recursive: true, withFileTypes: true }).find(
-    (e) => e.isFile() && e.name.endsWith('.zip'),
+    (e) => e.isFile() && e.name.startsWith(prefix) && e.name.endsWith('.zip'),
   );
   return hit ? join(hit.parentPath ?? hit.path, hit.name) : null;
+}
+
+/**
+ * Atomically replace STABLE_DIR with the freshly-staged extension in `stagedDir`.
+ * Validates that the payload actually looks like an extension (has a
+ * manifest.json) *before* touching the existing install, so a malformed or
+ * empty payload fails loudly and leaves a previously-working load directory
+ * intact. The rename is atomic — staging lives under OWL_DIR, the same
+ * filesystem as STABLE_DIR — so there's no window where the load dir is
+ * half-populated.
+ */
+export function publishStable(stagedDir) {
+  if (!existsSync(join(stagedDir, 'manifest.json'))) {
+    fail(
+      'Unpacked payload has no manifest.json — not a valid extension. Existing install left intact.',
+    );
+  }
+  mkdirSync(OWL_DIR, { recursive: true });
+  rmSync(STABLE_DIR, { recursive: true, force: true });
+  renameSync(stagedDir, STABLE_DIR);
 }
 
 // ── hand-off to Chrome ──────────────────────────────────────────────────────
@@ -167,6 +184,7 @@ export function handOff({ sourceLabel }) {
     step('Already loaded once — just refresh:');
     info(opened ? 'chrome://extensions just opened.' : 'Open chrome://extensions in Chrome.');
     info('Click the ↻ reload icon on the Owlcatraz card to pick up this build.');
+    info(`If the card isn't there, Load unpacked from: ${STABLE_DIR}`);
   }
   console.log('');
 }
