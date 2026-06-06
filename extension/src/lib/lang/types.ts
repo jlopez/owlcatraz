@@ -21,6 +21,7 @@ export type EnrichmentPOS =
   | 'verb'
   | 'adjective'
   | 'adverb'
+  | 'interjection'
   | 'pronoun'
   | 'article'
   | 'preposition'
