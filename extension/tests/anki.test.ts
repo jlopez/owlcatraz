@@ -305,6 +305,7 @@ describe('formatPOS', () => {
     [enr({ text: 'οι', lemma: 'οι', pos: 'article' }), 'article'],
     [enr({ text: 'με συγχωρείτε', lemma: 'με συγχωρείτε', pos: 'phrase' }), 'phrase'],
     [enr({ text: 'να', lemma: 'να', pos: 'particle' }), 'particle'],
+    [enr({ text: 'ouf', lemma: 'ouf', pos: 'interjection' }), 'interjection'],
     [enr({ text: 'foo', lemma: 'foo', pos: 'other' }), 'other'],
   ])('formats %o as "%s"', (enrichment, expected) => {
     expect(formatPOS(enrichment)).toBe(expected);

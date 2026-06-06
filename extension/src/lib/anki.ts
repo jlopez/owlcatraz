@@ -291,6 +291,7 @@ export function formatPOS(enrichment: Enrichment): string {
     case 'preposition':
     case 'particle':
     case 'adverb':
+    case 'interjection':
     case 'other':
       return enrichment.pos;
     default: {
