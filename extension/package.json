@@ -13,7 +13,10 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "install:latest": "node scripts/install-latest.mjs",
+    "install:pr": "node scripts/install-pr.mjs",
+    "install:local": "node scripts/install-local.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.4.0",
