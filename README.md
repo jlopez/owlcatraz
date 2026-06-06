@@ -81,6 +81,27 @@ extension ID, so your settings and enrichment cache carry across updates
    (top-right).
 4. Click **Load unpacked** and select `owlcatraz/extension/dist/`.
 
+### Option C — One command (from a repo checkout)
+
+If you have the repo checked out, three pnpm scripts do the fetch-and-unpack
+work for you and leave only the one-time **Load unpacked** click. Each
+populates the same stable folder (`~/.owlcatraz/unpacked`), so after the first
+load, updating is just the **Reload** (↻) click. Run them from `extension/`:
+
+| Command               | Installs                                                        |
+| --------------------- | -------------------------------------------------------------- |
+| `pnpm install:latest` | The newest published GitHub release                            |
+| `pnpm install:pr`     | The CI preview build for the current branch's open PR          |
+| `pnpm install:local`  | A fresh `pnpm build` of your working tree                      |
+
+Chrome can't silently install a non-Web-Store extension, so the final
+**Load unpacked** (first time) or **Reload** (updates) step is still manual —
+the scripts open `chrome://extensions`, and on macOS copy the folder path to
+your clipboard, to make it a few seconds. `install:latest` and `install:pr`
+need the [GitHub CLI](https://cli.github.com/) (`gh auth login`); `install:pr`
+detects the PR from your current branch and, if its CI is still running, waits
+for the preview build to finish before loading it.
+
 ## Usage
 
 1. The Owlcatraz toolbar icon appears. Click it on any tab where you are

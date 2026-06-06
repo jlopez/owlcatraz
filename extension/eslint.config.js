@@ -21,7 +21,13 @@ export default [
     },
   },
   {
-    files: ['*.config.{js,ts}', 'eslint.config.js', 'manifest.config.ts', 'tests/**/*.ts'],
+    files: [
+      '*.config.{js,ts}',
+      'eslint.config.js',
+      'manifest.config.ts',
+      'tests/**/*.ts',
+      'scripts/**/*.mjs',
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },
