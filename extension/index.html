@@ -17,6 +17,21 @@
         font-size: 14px;
         margin: 0 0 12px;
       }
+      .version-badge {
+        font-size: 10px;
+        font-weight: 500;
+        color: #888;
+        background: #f0f0f0;
+        border-radius: 8px;
+        padding: 1px 6px;
+        vertical-align: middle;
+        margin-left: 4px;
+      }
+      /* Hide the pill until main.ts stamps it (and outside an extension
+         runtime, where the manifest isn't available). */
+      .version-badge:empty {
+        display: none;
+      }
       .row {
         font-size: 13px;
         margin: 8px 0;
@@ -121,7 +136,7 @@
     </style>
   </head>
   <body>
-    <h1>Owlcatraz</h1>
+    <h1>Owlcatraz<span id="version" class="version-badge"></span></h1>
     <div id="root">Loading…</div>
     <script type="module" src="/src/popup/main.ts"></script>
   </body>

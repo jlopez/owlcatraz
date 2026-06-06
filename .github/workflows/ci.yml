@@ -40,3 +40,101 @@ jobs:
       - run: pnpm coverage
 
       - run: pnpm build
+
+  # Builds a loadable, versioned .zip on every run and — on `main` pushes only —
+  # cuts the tag + GitHub Release and attaches the zip to it. Gated behind
+  # `check`, so nothing ships unless typecheck/lint/format/coverage/build pass.
+  package:
+    name: package • release
+    needs: check
+    runs-on: ubuntu-latest
+    # Only derive-version's release step writes (push tag, create Release); it's
+    # a no-op on PRs (and fork PRs get a read-only token regardless), so the
+    # write scope is harmless there.
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      # derive-version reads the commit log back to the last tag, so the checkout
+      # must be deep and carry tags (unlike the `check` job's shallow clone).
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: extension/.nvmrc
+          cache: pnpm
+          cache-dependency-path: extension/pnpm-lock.yaml
+
+      # Repo-wide version from conventional commits. On a `main` push it cuts the
+      # tag + GitHub Release; on PRs (and non-release main pushes) it's a dry run
+      # that only computes outputs. The action reads git from the repo root, so
+      # the job's `working-directory: extension` default doesn't affect it.
+      - id: ver
+        uses: jlopez/derive-version@v1
+        with:
+          create-release: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # The display name for this build: clean semver for a real release, the
+      # richer `git describe` identity for preview builds. Computed once here via
+      # env (not inline interpolation) so the value is reused without duplicating
+      # the branch logic across the build and zip steps.
+      - id: meta
+        env:
+          RELEASED: ${{ steps.ver.outputs.released }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          BUILD_IDENTITY: ${{ steps.ver.outputs.build-identity }}
+        run: |
+          if [ "$RELEASED" = "true" ]; then
+            echo "version_name=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "version_name=$BUILD_IDENTITY" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      # Inject the derived version into the manifest at build time (see
+      # manifest.config.ts). `version` must be a dotted-integer string, so it
+      # gets the clean semver; `version_name` carries the display identity.
+      - run: pnpm build
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+
+      # Zip the built extension (sourcemaps excluded — the artifact is meant to
+      # be loaded, not debugged). The filename carries the display identity so PR
+      # artifacts and release assets are self-describing.
+      - id: zip
+        env:
+          VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+        run: |
+          NAME="owlcatraz-${VERSION_NAME}.zip"
+          (cd dist && zip -qr "../$NAME" . -x '*.map')
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      # Always publish a downloadable artifact: on PRs it's the preview build to
+      # load-unpacked for manual testing; on main it's the release candidate.
+      # `path` is relative to the workspace root, not the job working-directory.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.name }}
+          path: extension/${{ steps.zip.outputs.name }}
+          if-no-files-found: error
+
+      # On a real release, attach the same zip to the Release derive-version just
+      # created. `--clobber` makes a re-run idempotent (mirrors the action's own
+      # idempotent tag/Release handling).
+      - if: steps.ver.outputs.released == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          ZIP: ${{ steps.zip.outputs.name }}
+        run: gh release upload "$TAG" "$ZIP" --clobber

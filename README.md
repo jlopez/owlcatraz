@@ -1,7 +1,11 @@
 # Owlcatraz
 
 [![CI](https://github.com/jlopez/owlcatraz/actions/workflows/ci.yml/badge.svg)](https://github.com/jlopez/owlcatraz/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/jlopez/owlcatraz?sort=semver)](https://github.com/jlopez/owlcatraz/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org)
+[![Code style: Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
 **Owlcatraz — export your Duolingo vocabulary to an Anki deck.**
 
@@ -41,10 +45,30 @@ places — Duolingo for daily practice, Anki for spaced-repetition review
 on my own schedule. This tool does that for me, and now for anyone else
 who wants the same. The two services are complementary, not competing.
 
-## Installation and usage
+## Installation
 
-The extension is being prepared for the Chrome Web Store. Until it ships
-there, you can load it from source:
+**Chrome Web Store: coming soon.** The extension isn't on the store yet — a
+listing is being prepared. Until it ships there, install it one of two ways.
+Both load it as an _unpacked_ extension, so keep whichever folder you point
+Chrome at — Chrome reads from it on every launch, and Chrome will remind you
+on startup that a developer-mode extension is installed.
+
+### Option A — From a release (no build tools)
+
+1. Download the latest `owlcatraz-<version>.zip` from the
+   [Releases page](https://github.com/jlopez/owlcatraz/releases).
+2. Unzip it into a folder you intend to keep (not a temporary directory).
+3. Open `chrome://extensions` in Chrome, toggle **Developer mode** on
+   (top-right).
+4. Click **Load unpacked** and select the unzipped folder (the one
+   containing `manifest.json`).
+
+To update later, download the newer release, replace the folder's contents,
+and click **Reload** (↻) on the extension card. The build ships with a pinned
+extension ID, so your settings and enrichment cache carry across updates
+(see the note below for the one exception — moving to the Web Store build).
+
+### Option B — Build from source (for development)
 
 1. Clone the repo: `git clone https://github.com/jlopez/owlcatraz.git`
 2. Build it:
@@ -56,18 +80,32 @@ there, you can load it from source:
 3. Open `chrome://extensions` in Chrome, toggle **Developer mode** on
    (top-right).
 4. Click **Load unpacked** and select `owlcatraz/extension/dist/`.
-5. The Owlcatraz toolbar icon appears. Click it on any tab where you are
+
+## Usage
+
+1. The Owlcatraz toolbar icon appears. Click it on any tab where you are
    logged in to duolingo.com.
-6. Open **Settings**, paste your Anthropic API key (used for grammatical
+2. Open **Settings**, paste your Anthropic API key (used for grammatical
    enrichment — gender, part-of-speech, inflection notes), optionally
    adjust the Anki deck name, and **Save**.
-7. Start [Anki](https://apps.ankiweb.net/) with the
+3. Start [Anki](https://apps.ankiweb.net/) with the
    [AnkiConnect](https://github.com/FooSoft/anki-connect) add-on installed.
-8. Click **Sync to Anki**. The popup streams progress through the steps:
+4. Click **Sync to Anki**. The popup streams progress through the steps:
    read Duolingo session → fetch lexemes → enrich → write notes.
 
 Re-running **Sync to Anki** is safe — duplicate notes are detected via a
 preflight pass and skipped without re-fetching audio.
+
+> **When the Web Store release lands:** the published build will have a
+> different extension ID than the unpacked builds above (both of which share a
+> pinned ID), and Chrome scopes `chrome.storage.local` per extension ID. So
+> your settings and the
+> grammatical-enrichment cache (the API key and the per-word LLM results) will
+> **not** carry over automatically when you switch to the Store version —
+> you'll re-enter your Anthropic API key once, and the enrichment cache
+> rebuilds itself on the next sync (re-calling the Anthropic API for words it
+> had previously cached). The Anki deck itself is unaffected; it lives in Anki,
+> not in the extension.
 
 ## Privacy
 
