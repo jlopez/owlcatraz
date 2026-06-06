@@ -123,7 +123,7 @@ jobs:
       # Always publish a downloadable artifact: on PRs it's the preview build to
       # load-unpacked for manual testing; on main it's the release candidate.
       # `path` is relative to the workspace root, not the job working-directory.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.zip.outputs.name }}
           path: extension/${{ steps.zip.outputs.name }}
